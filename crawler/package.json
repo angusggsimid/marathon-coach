@@ -1,0 +1,25 @@
+{
+  "name": "marathon-crawler",
+  "version": "1.0.0",
+  "description": "Race data crawler — Zuicool, Gusto, Nowrun, CHINARUN → RaceEvent JSON",
+  "type": "module",
+  "scripts": {
+    "scrape":          "tsx src/index.ts",
+    "scrape:zuicool":  "tsx src/index.ts --source zuicool",
+    "scrape:gusto":    "tsx src/index.ts --source gusto",
+    "scrape:nowrun":   "tsx src/index.ts --source nowrun",
+    "scrape:chinarun": "tsx src/index.ts --source chinarun",
+    "scrape:dry":      "tsx src/index.ts --dry-run",
+    "merge":           "tsx src/merge.ts",
+    "serve":           "tsx src/server.ts",
+    "test":            "tsx src/index.ts --dry-run --limit 5"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

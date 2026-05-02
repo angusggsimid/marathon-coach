@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/data", "destination": "/races.json" },
+    { "source": "/(.*)",     "destination": "/index.html" }
+  ]
+}

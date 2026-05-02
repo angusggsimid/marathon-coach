@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  /* Apple-system color palette */
+  --color-accent:        #32D74B;   /* Apple system green, dark mode */
+  --color-accent-dim:    rgba(50, 215, 75, 0.15);
+  --color-accent-border: rgba(50, 215, 75, 0.30);
+
+  --color-bg:            #000000;   /* pure black — iPhone base */
+  --color-surface:       #1C1C1E;   /* Apple grouped table background */
+  --color-surface-2:     #2C2C2E;   /* elevated surface */
+  --color-surface-3:     #3A3A3C;   /* highest elevation */
+
+  --color-separator:     rgba(255,255,255,0.08);
+  --color-separator-opaque: #38383A;
+
+  --color-label:         #FFFFFF;
+  --color-label-2:       rgba(235,235,245,0.60);
+  --color-label-3:       rgba(235,235,245,0.30);
+  --color-label-4:       rgba(235,235,245,0.16);
+
+  --color-fill:          rgba(120,120,128,0.36);
+  --color-fill-2:        rgba(120,120,128,0.24);
+  --color-fill-3:        rgba(118,118,128,0.18);
+
+  --color-blue:          #0A84FF;
+  --color-orange:        #FF9F0A;
+  --color-red:           #FF453A;
+  --color-purple:        #BF5AF2;
+  --color-teal:          #5AC8FA;
+  --color-yellow:        #FFD60A;
+
+}
+
+*, *::before, *::after {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-label);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-surface-3); border-radius: 2px; }
+
+/* Selection */
+::selection { background: var(--color-accent); color: #000; }
+
+/* Smooth transitions */
+button, a, input, select { transition: all 0.18s ease; }

@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>赛事页</title>
+<style>
+:root {
+  --bg:     #0f0f11;
+  --s1:     #1c1c1e;
+  --s2:     #2c2c2e;
+  --s3:     #3a3a3c;
+  --t1:     #f5f5f7;
+  --t2:     rgba(245,245,247,.65);
+  --t3:     rgba(245,245,247,.35);
+  --t4:     rgba(245,245,247,.18);
+  --accent: #ffd60a;
+  --green:  #32d74b;
+  --red:    #ff453a;
+  --blue:   #0a84ff;
+  --orange: #ff9f0a;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;
+  background:var(--bg);color:var(--t1);font-size:14px;line-height:1.5}
+
+/* ── layout ── */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── nav ── */
+nav{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--s3);background:var(--s1);gap:12px}
+nav h1{font-size:17px;font-weight:700}
+.nav-right{display:flex;align-items:center;gap:8px}
+
+/* ── buttons ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;
+  border-radius:20px;border:none;cursor:pointer;font-size:13px;font-weight:600;
+  transition:opacity .15s,transform .1s;white-space:nowrap}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:var(--accent);color:#000}
+.btn-ghost{background:var(--s2);color:var(--t1)}
+.btn-reg{background:var(--green);color:#000}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.spinner{width:12px;height:12px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;
+  border-radius:50%;animation:spin .7s linear infinite;display:none}
+.btn.running .spinner{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── stats ── */
+#stats-row{flex-shrink:0;display:flex;gap:10px;padding:12px 20px;
+  border-bottom:1px solid var(--s3);overflow-x:auto}
+.stat{flex-shrink:0;background:var(--s1);border-radius:12px;padding:10px 18px;min-width:80px}
+.stat .num{font-size:22px;font-weight:700;line-height:1.1}
+.stat .lbl{font-size:11px;color:var(--t3);margin-top:2px}
+.stat.c-green .num{color:var(--green)}
+.stat.c-orange .num{color:var(--orange)}
+.stat.c-dim .num{color:var(--t3)}
+/* Clickable stat (报名中) */
+.stat-action{cursor:pointer;transition:background .15s;position:relative;
+  border:1px solid transparent}
+.stat-action:hover{background:var(--s2)}
+.stat-action::after{content:'▶';position:absolute;bottom:8px;right:10px;
+  font-size:8px;color:var(--t4)}
+.stat-action.active{border-color:rgba(50,215,75,.4);background:rgba(50,215,75,.08)}
+.stat-action.active::after{content:'✕';color:rgba(50,215,75,.5)}
+
+/* ── filters ── */
+#filter-row{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:10px 20px;
+  border-bottom:1px solid var(--s3);flex-wrap:wrap}
+#search{flex:1;min-width:120px;background:var(--s1);border:1px solid var(--s3);border-radius:10px;
+  padding:7px 12px;color:var(--t1);font-size:13px;outline:none}
+#search::placeholder{color:var(--t3)}
+#search:focus{border-color:var(--accent)}
+.chip{flex-shrink:0;padding:5px 14px;border-radius:20px;border:none;font-size:12px;
+  font-weight:600;cursor:pointer;background:var(--s2);color:var(--t2);transition:all .15s}
+.chip.active{background:var(--accent);color:#000}
+/* 报名中 chip: different active color */
+.chip-reg{background:var(--s2);color:var(--t2)}
+.chip-reg.active{background:var(--green);color:#000}
+.filter-sep{width:1px;background:var(--s3);height:20px;flex-shrink:0;align-self:center}
+
+/* ── race list scroll area ── */
+#scroll{flex:1;overflow-y:auto;padding:0 20px 80px}
+
+/* ── section header (sticky) ── */
+.section-hd{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 0 6px;position:sticky;top:0;background:var(--bg);z-index:2}
+.section-hd .title{font-size:12px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.7px;color:var(--t3)}
+.section-hd.open-hd .title{color:var(--green)}
+.section-hd .count{font-size:11px;color:var(--t4)}
+.section-toggle{background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:11px;padding:0 4px;transition:color .15s}
+.section-toggle:hover{color:var(--t1)}
+
+/* ── month sub-header ── */
+.month-hd{font-size:11px;font-weight:600;color:var(--t3);padding:10px 0 4px;
+  letter-spacing:.5px}
+
+/* ── race card ── */
+.race-card{display:flex;align-items:flex-start;gap:12px;background:var(--s1);
+  border-radius:14px;padding:13px 14px;margin-bottom:6px;cursor:pointer;
+  transition:background .12s;border:1px solid transparent}
+.race-card:hover{background:var(--s2)}
+.race-card.in-my-list{border-color:rgba(255,214,10,.25)}
+/* Open race: subtle green left-border glow */
+.race-card.is-open{border-left:3px solid rgba(50,215,75,.5)}
+
+.rc-date{flex-shrink:0;width:34px;text-align:center;padding-top:1px}
+.rc-date .day{font-size:20px;font-weight:700;line-height:1}
+.rc-date .mon{font-size:9px;color:var(--t3);text-transform:uppercase;margin-top:1px}
+.rc-date .tbd{font-size:9px;color:var(--orange);font-weight:700;margin-top:2px}
+
+.rc-divider{width:1px;background:var(--s3);align-self:stretch;flex-shrink:0}
+
+.rc-body{flex:1;min-width:0}
+.rc-name{font-size:14px;font-weight:600;word-break:break-all;line-height:1.3}
+.rc-meta{font-size:11px;color:var(--t3);margin-top:3px}
+.rc-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;align-items:center}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;
+  font-size:10px;font-weight:700}
+.tag-full{background:rgba(255,214,10,.15);color:var(--accent)}
+.tag-half{background:rgba(10,132,255,.15);color:var(--blue)}
+.tag-open{background:rgba(50,215,75,.15);color:var(--green)}
+.tag-upcoming{background:rgba(10,132,255,.1);color:var(--blue)}
+.tag-closed{background:rgba(255,69,58,.1);color:var(--red)}
+.tag-tbd{background:rgba(255,159,10,.15);color:var(--orange)}
+.tag-added{background:rgba(255,214,10,.2);color:var(--accent)}
+
+/* 去报名 CTA — pill button on card */
+.rc-reg-link{display:inline-flex;align-items:center;gap:3px;padding:3px 10px;
+  border-radius:8px;background:var(--green);color:#000;font-size:10px;font-weight:700;
+  text-decoration:none;transition:opacity .15s;flex-shrink:0;white-space:nowrap}
+.rc-reg-link:hover{opacity:.85}
+
+.rc-right{flex-shrink:0;padding-top:2px}
+
+/* ── my races header ── */
+.my-section-hd{padding:14px 0 8px;border-bottom:1px solid var(--s3);margin-bottom:10px}
+.my-section-hd h2{font-size:13px;font-weight:700;color:var(--accent)}
+
+/* ── my race card (compact) ── */
+.my-card{display:flex;align-items:center;gap:10px;background:var(--s1);
+  border:1px solid rgba(255,214,10,.2);border-radius:12px;padding:10px 14px;
+  margin-bottom:6px}
+.my-card-info{flex:1;min-width:0}
+.my-card-info .name{font-size:13px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.my-card-info .meta{font-size:11px;color:var(--t3);margin-top:1px}
+.my-remove{background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:18px;line-height:1;padding:2px 4px;transition:color .15s}
+.my-remove:hover{color:var(--red)}
+.my-dist-badge{flex-shrink:0;padding:3px 9px;border-radius:8px;font-size:10px;
+  font-weight:700;background:rgba(255,214,10,.15);color:var(--accent)}
+
+/* ── detail sheet ── */
+#sheet-overlay{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);
+  backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center}
+#sheet-overlay.open{display:flex}
+#sheet{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:480px;
+  padding:0 0 env(safe-area-inset-bottom,16px);
+  animation:slideUp .28s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.sheet-handle{display:flex;justify-content:center;padding:12px 0 4px}
+.sheet-handle span{width:36px;height:4px;border-radius:2px;background:var(--s3)}
+.sheet-body{padding:4px 22px 24px}
+.sheet-body h2{font-size:19px;font-weight:700;margin-bottom:6px}
+.sheet-meta{font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.8}
+.sheet-section{margin-bottom:16px}
+.sheet-section label{display:block;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;color:var(--t3);margin-bottom:8px}
+.dist-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dist-opt{padding:12px;border-radius:14px;border:1px solid var(--s3);
+  background:var(--s2);cursor:pointer;transition:all .15s;text-align:center}
+.dist-opt:hover{border-color:var(--accent)}
+.dist-opt.active{background:rgba(255,214,10,.12);border-color:var(--accent)}
+.dist-opt .d-name{font-size:15px;font-weight:700}
+.dist-opt .d-km{font-size:11px;color:var(--t3);margin-top:2px}
+.sheet-actions{display:flex;gap:8px;margin-top:6px}
+.sheet-actions .btn{flex:1;justify-content:center;padding:13px}
+
+/* ── add modal ── */
+#add-overlay{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.7);
+  backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;
+  padding:20px}
+#add-overlay.open{display:flex}
+#add-modal{background:var(--s1);border-radius:20px;width:100%;max-width:440px;
+  padding:24px;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+#add-modal h2{font-size:17px;font-weight:700;margin-bottom:20px}
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.6px;color:var(--t3);margin-bottom:6px}
+.form-input{width:100%;background:var(--s2);border:1px solid var(--s3);border-radius:10px;
+  padding:9px 12px;color:var(--t1);font-size:13px;outline:none}
+.form-input::placeholder{color:var(--t3)}
+.form-input:focus{border-color:var(--accent)}
+.suggestions{background:var(--s2);border-radius:10px;overflow:hidden;margin-top:6px;
+  border:1px solid var(--s3)}
+.suggestion-item{padding:10px 12px;cursor:pointer;transition:background .1s}
+.suggestion-item:hover{background:var(--s3)}
+.suggestion-item .sg-name{font-size:13px;font-weight:500}
+.suggestion-item .sg-meta{font-size:11px;color:var(--t3);margin-top:1px}
+.suggestion-item .sg-warn{font-size:10px;color:var(--orange);margin-top:1px}
+.add-dist-opts{display:flex;gap:8px;margin-top:2px}
+.add-dist-opt{flex:1;padding:10px;border-radius:12px;border:1px solid var(--s3);
+  background:var(--s2);cursor:pointer;text-align:center;font-size:13px;font-weight:600;
+  color:var(--t2);transition:all .15s}
+.add-dist-opt.active{background:rgba(255,214,10,.12);border-color:var(--accent);color:var(--accent)}
+.modal-actions{display:flex;gap:8px;margin-top:20px}
+.modal-actions .btn{flex:1;justify-content:center;padding:12px}
+
+/* ── terminal ── */
+#terminal-wrap{flex-shrink:0;border-top:1px solid var(--s3);
+  max-height:0;overflow:hidden;transition:max-height .3s ease}
+#terminal-wrap.open{max-height:260px}
+#terminal-hd{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 20px;cursor:pointer;background:var(--s1)}
+#terminal-hd span{font-size:11px;font-weight:700;color:var(--t3);
+  text-transform:uppercase;letter-spacing:.8px}
+#terminal-body{font-family:'SF Mono',Menlo,monospace;font-size:11px;background:#0a0a0c;
+  color:#b0f0b0;padding:10px 20px;height:220px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-all;line-height:1.6}
+.term-err{color:#ff7070}
+
+/* ── empty ── */
+.empty{text-align:center;padding:60px 20px;color:var(--t3)}
+.empty .icon{font-size:36px;margin-bottom:10px}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Nav -->
+  <nav>
+    <h1>🏃 赛事</h1>
+    <div class="nav-right">
+      <button class="btn btn-ghost" onclick="openAddModal()">＋ 手动添加</button>
+      <button class="btn btn-primary" id="btn-scrape" onclick="runScrape()">
+        <div class="spinner"></div>
+        <span>更新爬虫</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Stats — 报名中 is clickable, acts as quick filter -->
+  <div id="stats-row">
+    <div class="stat c-green stat-action" id="stat-open-card" onclick="toggleOpenFilter()" title="点击只看报名中">
+      <div class="num" id="s-open">—</div>
+      <div class="lbl">报名中</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="s-upcoming">—</div>
+      <div class="lbl">即将开赛</div>
+    </div>
+    <div class="stat c-orange">
+      <div class="num" id="s-tbd">—</div>
+      <div class="lbl">日期待定</div>
+    </div>
+    <div class="stat c-dim">
+      <div class="num" id="s-past">—</div>
+      <div class="lbl">已结束</div>
+    </div>
+  </div>
+
+  <!-- Filters row 1: search + distance + open -->
+  <div id="filter-row">
+    <input id="search" type="text" placeholder="搜索赛事名称或城市…" oninput="onSearch(this.value)">
+    <button class="chip active" data-dist="all"  onclick="setDist('all')">全部</button>
+    <button class="chip"        data-dist="full" onclick="setDist('full')">全马</button>
+    <button class="chip"        data-dist="half" onclick="setDist('half')">半马</button>
+    <span class="filter-sep"></span>
+    <button class="chip chip-reg" id="chip-reg" onclick="toggleOpenFilter()">报名中</button>
+    <span class="filter-sep"></span>
+    <select id="prov-select" onchange="setProvince(this.value)"
+      style="background:var(--s2);border:1px solid var(--s3);border-radius:10px;
+             color:var(--t2);padding:5px 10px;font-size:12px;font-weight:600;
+             outline:none;cursor:pointer;flex-shrink:0">
+      <option value="all">全国</option>
+    </select>
+  </div>
+  <!-- Filters row 2: month chips (populated dynamically) -->
+  <div id="month-row" style="flex-shrink:0;display:flex;align-items:center;gap:6px;
+    padding:6px 20px 8px;border-bottom:1px solid var(--s3);overflow-x:auto;
+    scrollbar-width:none">
+  </div>
+
+  <!-- Scrollable race list -->
+  <div id="scroll">
+    <div class="empty"><div class="icon">⏳</div><p>加载中…</p></div>
+  </div>
+
+  <!-- Terminal -->
+  <div id="terminal-wrap">
+    <div id="terminal-hd" onclick="toggleTerminal()">
+      <span id="terminal-title">终端</span>
+      <span style="color:var(--t3);font-size:11px" id="terminal-toggle">▼ 收起</span>
+    </div>
+    <div id="terminal-body"></div>
+  </div>
+
+</div>
+
+<!-- Detail sheet -->
+<div id="sheet-overlay" onclick="closeSheet(event)">
+  <div id="sheet">
+    <div class="sheet-handle"><span></span></div>
+    <div class="sheet-body">
+      <h2 id="sheet-name"></h2>
+      <div class="sheet-meta" id="sheet-meta"></div>
+      <div class="sheet-section" id="sheet-dist-section">
+        <label>参赛距离</label>
+        <div class="dist-opts" id="sheet-dist-opts"></div>
+      </div>
+      <div class="sheet-actions" id="sheet-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual add modal -->
+<div id="add-overlay" onclick="closeAddModal(event)">
+  <div id="add-modal">
+    <h2>手动添加赛事</h2>
+    <div class="form-row">
+      <label>赛事名称</label>
+      <input class="form-input" id="add-name" type="text"
+        placeholder="例：2026北京马拉松" oninput="onAddNameInput(this.value)" autocomplete="off">
+      <div id="add-suggestions" style="display:none"></div>
+    </div>
+    <div class="form-row">
+      <label>比赛日期</label>
+      <input class="form-input" id="add-date" type="date">
+    </div>
+    <div class="form-row">
+      <label>参赛距离</label>
+      <div class="add-dist-opts">
+        <div class="add-dist-opt active" data-d="full" onclick="setAddDist('full')">全马 42.195km</div>
+        <div class="add-dist-opt"        data-d="half" onclick="setAddDist('half')">半马 21.0975km</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmAdd()">添加到我的赛事</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────────
+const TODAY = new Date().toISOString().slice(0, 10);
+const MON   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MON_ZH = ['一月','二月','三月','四月','五月','六月',
+                 '七月','八月','九月','十月','十一月','十二月'];
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let allRaces     = [];
+let myRaces      = loadMyRaces();
+let dist         = 'all';
+let statusFilter = 'all';   // 'all' | 'open'
+let province     = 'all';   // province filter
+let monthFilter  = 'all';   // 'all' | 'YYYY-MM'
+let query        = '';
+let sheetRace    = null;
+let sheetDist    = 'full';
+let addDist      = 'full';
+
+// ── My Races (localStorage) ────────────────────────────────────────────────────
+function loadMyRaces() {
+  try { return JSON.parse(localStorage.getItem('my-races') || '[]'); } catch { return []; }
+}
+function saveMyRaces() { localStorage.setItem('my-races', JSON.stringify(myRaces)); }
+
+function addToMyList(race, pickedDist) {
+  const id = race.id || race._id;
+  myRaces = myRaces.filter(r => r.id !== id);
+  myRaces.unshift({
+    id, name: race.name, date: race.date, city: race.city, province: race.province,
+    distance: pickedDist, dateTBD: race._dateTBD || false, source: 'catalog',
+    registrationUrl: race.registrationUrl || null,
+  });
+  saveMyRaces();
+  render();
+}
+
+function addManualToMyList(name, date, pickedDist) {
+  const id = 'manual-' + Date.now();
+  myRaces.unshift({ id, name, date, city: '', province: '', distance: pickedDist,
+    dateTBD: false, source: 'manual' });
+  saveMyRaces();
+  render();
+}
+
+function removeFromMyList(id) {
+  myRaces = myRaces.filter(r => r.id !== id);
+  saveMyRaces();
+  render();
+}
+
+function isInMyList(race) {
+  return myRaces.some(r => r.id === (race.id || race._id));
+}
+
+// ── Load data ──────────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res  = await fetch('/api/data');
+    const data = await res.json();
+    allRaces = data.races || [];
+
+    // Stats: four non-overlapping buckets (open ∪ noOpen ∪ tbd ∪ past = total)
+    const openF   = allRaces.filter(r => classify(r) === 'upcoming' && r.status === 'open');
+    const noOpenF = allRaces.filter(r => classify(r) === 'upcoming' && r.status !== 'open');
+    const tbdF    = allRaces.filter(r => classify(r) === 'tbd');
+    const pastF   = allRaces.filter(r => classify(r) === 'past');
+
+    el('s-open').textContent     = openF.length;
+    el('s-upcoming').textContent = noOpenF.length;
+    el('s-tbd').textContent      = tbdF.length;
+    el('s-past').textContent     = pastF.length;
+
+    // Build province list for filter dropdown
+    buildProvinceFilter(allRaces);
+
+    if (data.lastScraped) {
+      el('terminal-title').textContent =
+        '终端 · 上次更新 ' + new Date(data.lastScraped).toLocaleString('zh-CN');
+    }
+    render();
+  } catch (e) {
+    el('scroll').innerHTML = `<div class="empty"><div class="icon">⚠️</div><p>加载失败: ${e}</p></div>`;
+  }
+}
+
+// ── Classify & filter ──────────────────────────────────────────────────────────
+function classify(race) {
+  // TBD races from a past year (e.g. 2025-01-01 placeholder) → past
+  if (race._dateTBD && race.date.slice(0,4) < TODAY.slice(0,4)) return 'past';
+  if (race._dateTBD)     return 'tbd';
+  if (race.date < TODAY) return 'past';
+  return 'upcoming';
+}
+
+function applyFilter(races) {
+  const q = query.toLowerCase().trim();
+  return races.filter(r => {
+    if (dist !== 'all' && !r.distances.includes(dist)) return false;
+    if (statusFilter === 'open' && r.status !== 'open') return false;
+    if (province === '__foreign__' && !FOREIGN_PROVINCES.has(r.province)) return false;
+    else if (province !== 'all' && province !== '__foreign__' && r.province !== province) return false;
+    if (monthFilter !== 'all' && !r.date.startsWith(monthFilter)) return false;
+    if (q) return (r.name + r.city + r.province).toLowerCase().includes(q);
+    return true;
+  });
+}
+
+// ── Filter controls ────────────────────────────────────────────────────────────
+function setDist(d) {
+  dist = d;
+  document.querySelectorAll('.chip[data-dist]').forEach(c =>
+    c.classList.toggle('active', c.dataset.dist === d));
+  render();
+}
+
+function toggleOpenFilter() {
+  statusFilter = statusFilter === 'open' ? 'all' : 'open';
+  const isOn = statusFilter === 'open';
+  el('chip-reg').classList.toggle('active', isOn);
+  el('stat-open-card').classList.toggle('active', isOn);
+  render();
+}
+
+function setProvince(p) {
+  province = p;
+  monthFilter = 'all';   // reset month when province changes
+  buildMonthFilter(allRaces);
+  render();
+}
+
+function setMonth(m) {
+  monthFilter = m;
+  document.querySelectorAll('.chip[data-month]').forEach(c =>
+    c.classList.toggle('active', c.dataset.month === m));
+  render();
+}
+
+function onSearch(q) {
+  query = q;
+  render();
+}
+
+// ── Dynamic filter builders ────────────────────────────────────────────────────
+const FOREIGN_PROVINCES = new Set([
+  '日本','韩国','美国','法国','泰国','马来西亚','英国','澳大利亚',
+  '香港','澳门','台湾','意大利','德国','西班牙','新加坡','加拿大',
+  '新西兰','荷兰','波兰','葡萄牙','瑞典','瑞士','奥地利','比利时',
+]);
+
+function buildProvinceFilter(races) {
+  const sel = el('prov-select');
+  if (!sel) return;
+  // Collect provinces from future races only
+  const futureProv = new Set(
+    races.filter(r => classify(r) !== 'past').map(r => r.province).filter(Boolean)
+  );
+  const domestic = [...futureProv].filter(p => !FOREIGN_PROVINCES.has(p)).sort((a,b) => a.localeCompare(b, 'zh'));
+  const hasForeign = [...futureProv].some(p => FOREIGN_PROVINCES.has(p));
+  const cur = province;
+  sel.innerHTML = '<option value="all">全国</option>' +
+    domestic.map(p => `<option value="${esc(p)}"${p===cur?' selected':''}>${esc(p)}</option>`).join('') +
+    (hasForeign ? `<option value="__foreign__"${cur==='__foreign__'?' selected':''}>国外</option>` : '');
+  buildMonthFilter(races);
+}
+
+function buildMonthFilter(races) {
+  const row = el('month-row');
+  if (!row) return;
+  // Show months that have future races matching current province
+  const relevant = races.filter(r => {
+    if (classify(r) === 'past') return false;
+    if (province === '__foreign__' && !FOREIGN_PROVINCES.has(r.province)) return false;
+    else if (province !== 'all' && province !== '__foreign__' && r.province !== province) return false;
+    return true;
+  });
+  const monthSet = new Set(relevant.map(r => r._dateTBD ? null : r.date.slice(0,7)).filter(Boolean));
+  const months = [...monthSet].sort();
+  if (months.length === 0) { row.innerHTML = ''; return; }
+  row.innerHTML =
+    `<button class="chip${monthFilter==='all'?' active':''}" data-month="all"
+       onclick="setMonth('all')" style="flex-shrink:0">全部月份</button>` +
+    months.map(m => {
+      const [y,mo] = m.split('-');
+      const label = `${parseInt(mo)}月`;
+      return `<button class="chip${monthFilter===m?' active':''}" data-month="${m}"
+        onclick="setMonth('${m}')" style="flex-shrink:0">${label}</button>`;
+    }).join('');
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+function render() {
+  const filtered    = applyFilter(allRaces);
+  const upcomingAll = filtered.filter(r => classify(r) === 'upcoming')
+                              .sort((a,b) => a.date.localeCompare(b.date));
+  const tbdR        = filtered.filter(r => classify(r) === 'tbd')
+                              .sort((a,b) => a.date.localeCompare(b.date));
+  const pastR       = filtered.filter(r => classify(r) === 'past')
+                              .sort((a,b) => b.date.localeCompare(a.date));
+
+  // Sub-divide upcoming: open vs. non-open (only when showing all statuses)
+  const openR    = upcomingAll.filter(r => r.status === 'open');
+  const nonOpenR = upcomingAll.filter(r => r.status !== 'open');
+
+  let html = '';
+
+  // ── My races ──
+  if (myRaces.length > 0) {
+    html += `<div class="my-section-hd"><h2>★ 我的赛事 · ${myRaces.length} 场</h2></div>`;
+    for (const mr of myRaces) {
+      const distLabel = mr.distance === 'full' ? '全马' : '半马';
+      const dateStr   = formatDate(mr.date, mr.dateTBD);
+      const regBtn    = mr.registrationUrl
+        ? `<a class="rc-reg-link" href="${esc(mr.registrationUrl)}" target="_blank" onclick="event.stopPropagation()">去报名 →</a>`
+        : '';
+      html += `
+      <div class="my-card">
+        <div class="my-card-info">
+          <div class="name">${esc(mr.name)}</div>
+          <div class="meta">${dateStr}${mr.city ? ' · ' + esc(mr.city) : ''}${mr.source==='manual'?' · 手动添加':''}</div>
+        </div>
+        <span class="my-dist-badge">${distLabel}</span>
+        ${regBtn}
+        <button class="my-remove" onclick="removeFromMyList('${mr.id}')" title="移除">×</button>
+      </div>`;
+    }
+  }
+
+  // ── When statusFilter === 'open': single "报名中" section ──
+  if (statusFilter === 'open') {
+    if (upcomingAll.length === 0) {
+      html += `<div class="empty"><div class="icon">🔍</div><p>没有找到报名中的赛事</p></div>`;
+    } else {
+      html += openSectionHeader('报名中', upcomingAll.length);
+      html += `<div id="open-body">`;
+      for (const [mk, races] of groupByMonth(upcomingAll)) {
+        const [y, m] = mk.split('-');
+        html += `<div class="month-hd">${y}年 ${parseInt(m)}月 · ${races.length} 场</div>`;
+        for (const r of races) html += raceCardHtml(r);
+      }
+      html += `</div>`;
+    }
+  } else {
+    // ── Normal view: sub-divided by registration status ──
+
+    // Section A: 报名中 (non-collapsible, prominent)
+    if (openR.length > 0) {
+      html += openSectionHeader('报名中', openR.length);
+      html += `<div id="open-body">`;
+      for (const [mk, races] of groupByMonth(openR)) {
+        const [y, m] = mk.split('-');
+        html += `<div class="month-hd">${y}年 ${parseInt(m)}月 · ${races.length} 场</div>`;
+        for (const r of races) html += raceCardHtml(r);
+      }
+      html += `</div>`;
+    }
+
+    // Section B: 日期已公布 (other upcoming, collapsible — collapsed by default when open section exists)
+    if (nonOpenR.length > 0) {
+      const startCollapsed = openR.length > 0 && !query;
+      html += sectionHeader('日期已公布', nonOpenR.length, 'upcoming-body', startCollapsed);
+      html += `<div id="upcoming-body"${startCollapsed ? ' style="display:none"' : ''}>`;
+      for (const [mk, races] of groupByMonth(nonOpenR)) {
+        const [y, m] = mk.split('-');
+        html += `<div class="month-hd">${y}年 ${parseInt(m)}月 · ${races.length} 场</div>`;
+        for (const r of races) html += raceCardHtml(r);
+      }
+      html += `</div>`;
+    } else if (openR.length === 0 && upcomingAll.length === 0 && tbdR.length === 0 && pastR.length === 0) {
+      // fully empty
+    }
+
+    // Section C: 日期待定
+    if (tbdR.length > 0) {
+      html += sectionHeader('日期待定', tbdR.length, 'tbd-body', true);
+      html += `<div id="tbd-body" style="display:none">`;
+      for (const r of tbdR) html += raceCardHtml(r);
+      html += `</div>`;
+    }
+
+    // Section D: 已结束 (always collapsed)
+    if (pastR.length > 0) {
+      html += sectionHeader('已结束', pastR.length, 'past-body', true);
+      html += `<div id="past-body" style="display:none">`;
+      for (const r of pastR) html += raceCardHtml(r);
+      html += `</div>`;
+    }
+  }
+
+  if (!html || (html.trim() === '' && myRaces.length === 0)) {
+    html = `<div class="empty"><div class="icon">🔍</div><p>没有找到相关赛事</p></div>`;
+  }
+
+  el('scroll').innerHTML = html;
+}
+
+function openSectionHeader(title, count) {
+  // No collapse button — always visible
+  return `
+  <div class="section-hd open-hd">
+    <span class="title">● ${title}</span>
+    <span class="count">${count} 场</span>
+  </div>`;
+}
+
+function sectionHeader(title, count, bodyId, collapsed) {
+  const arrow = collapsed ? '▶ 展开' : '▼ 收起';
+  return `
+  <div class="section-hd">
+    <span class="title">${title}</span>
+    <span class="count">${count} 场
+      <button class="section-toggle" onclick="toggleSection('${bodyId}',this)">${arrow}</button>
+    </span>
+  </div>`;
+}
+
+function toggleSection(bodyId, btn) {
+  const el_ = document.getElementById(bodyId);
+  if (!el_) return;
+  const hidden = el_.style.display === 'none';
+  el_.style.display = hidden ? '' : 'none';
+  btn.textContent   = hidden ? '▼ 收起' : '▶ 展开';
+}
+
+function groupByMonth(races) {
+  const m = new Map();
+  for (const r of races) {
+    const k = r.date.slice(0, 7);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  }
+  return m;
+}
+
+function raceCardHtml(r) {
+  const d      = r.date ? new Date(r.date + 'T00:00:00') : null;
+  const day    = d ? d.getDate() : '?';
+  const mon    = d ? MON[d.getMonth()] : '';
+  const added  = isInMyList(r);
+  const isOpen = r.status === 'open';
+
+  const dists = (r.distances || []).map(v =>
+    `<span class="tag tag-${v}">${v==='full'?'全马':'半马'}</span>`).join('');
+
+  // Status tag — only show non-upcoming statuses (upcoming is the default quiet state)
+  const statusMap  = { closed:'报名已截止', cancelled:'已取消', postponed:'已延期' };
+  const classMap   = { closed:'tag-closed', cancelled:'tag-closed', postponed:'tag-closed' };
+  const statusTag  = (!isOpen && statusMap[r.status])
+    ? `<span class="tag ${classMap[r.status]}">${statusMap[r.status]}</span>` : '';
+
+  const tbdBadge   = r._dateTBD ? `<span class="tag tag-tbd">待定</span>` : '';
+  const addedBadge = added ? `<span class="tag tag-added">✓ 已添加</span>` : '';
+
+  // 去报名 CTA — only for open races with a URL
+  const regCTA = (isOpen && r.registrationUrl)
+    ? `<a class="rc-reg-link" href="${esc(r.registrationUrl)}" target="_blank"
+         onclick="event.stopPropagation()">去报名 →</a>` : '';
+
+  return `
+  <div class="race-card${added?' in-my-list':''}${isOpen?' is-open':''}"
+       onclick="openSheet(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+    <div class="rc-date">
+      <div class="day">${day}</div>
+      <div class="mon">${mon}</div>
+      ${r._dateTBD ? '<div class="tbd">待定</div>' : ''}
+    </div>
+    <div class="rc-divider"></div>
+    <div class="rc-body">
+      <div class="rc-name">${esc(r.name)}</div>
+      <div class="rc-meta">📍 ${locLabel(r)}</div>
+      <div class="rc-tags">${dists}${statusTag}${tbdBadge}${addedBadge}${regCTA}</div>
+    </div>
+  </div>`;
+}
+
+// ── Detail sheet ───────────────────────────────────────────────────────────────
+function openSheet(race) {
+  sheetRace = race;
+  const added = isInMyList(race);
+  const mr = myRaces.find(r => r.id === race.id);
+
+  sheetDist = mr ? mr.distance : (race.distances?.[0] || 'full');
+
+  el('sheet-name').textContent = race.name;
+
+  const statusLabel = race.status === 'open'
+    ? `<span style="color:var(--green);font-weight:700">● 报名中</span>`
+    : race.status === 'closed'    ? `<span style="color:var(--red)">报名已截止</span>`
+    : race.status === 'postponed' ? `<span style="color:var(--orange)">已延期</span>`
+    : race.status === 'cancelled' ? `<span style="color:var(--red)">已取消</span>`
+    : '';  // upcoming: don't show a label — it's the default quiet state
+
+  el('sheet-meta').innerHTML = [
+    `📅 ${formatDate(race.date, race._dateTBD)}`,
+    `📍 ${locLabel(race)}`,
+    statusLabel,
+  ].filter(Boolean).join('<br>');
+
+  const dists = race.distances && race.distances.length > 1
+    ? race.distances : (race.distances || ['full', 'half']);
+  el('sheet-dist-section').style.display = dists.length === 1 ? 'none' : '';
+  el('sheet-dist-opts').innerHTML = dists.map(d => `
+    <div class="dist-opt ${sheetDist===d?'active':''}" data-d="${d}" onclick="setSheetDist('${d}')">
+      <div class="d-name">${d==='full'?'全马':'半马'}</div>
+      <div class="d-km">${d==='full'?'42.195 km':'21.0975 km'}</div>
+    </div>`).join('');
+
+  // Build action buttons
+  let actionsHtml = added
+    ? `<button class="btn btn-ghost" onclick="removeFromMyList('${race.id}');closeSheet()">移除</button>
+       <button class="btn btn-primary" onclick="addToMyList(sheetRace,sheetDist);closeSheet()">更新目标</button>`
+    : `<button class="btn btn-ghost" onclick="closeSheet()">取消</button>
+       <button class="btn btn-primary" onclick="addToMyList(sheetRace,sheetDist);closeSheet()">加入我的赛事</button>`;
+
+  // 去报名 button — full width below, only for open races
+  if (race.status === 'open' && race.registrationUrl) {
+    actionsHtml += `<a class="btn btn-reg" href="${esc(race.registrationUrl)}" target="_blank"
+      style="flex-basis:100%;justify-content:center;text-decoration:none;margin-top:0">
+      去官网报名 ↗</a>`;
+  }
+
+  el('sheet-actions').innerHTML = actionsHtml;
+  el('sheet-overlay').classList.add('open');
+}
+
+function setSheetDist(d) {
+  sheetDist = d;
+  document.querySelectorAll('.dist-opt').forEach(el_ =>
+    el_.classList.toggle('active', el_.dataset.d === d));
+}
+
+function closeSheet(e) {
+  if (e && e.target !== el('sheet-overlay')) return;
+  el('sheet-overlay').classList.remove('open');
+}
+
+// ── Manual add ─────────────────────────────────────────────────────────────────
+function openAddModal() {
+  el('add-name').value = '';
+  el('add-date').value = '';
+  el('add-suggestions').style.display = 'none';
+  setAddDist('full');
+  el('add-overlay').classList.add('open');
+  setTimeout(() => el('add-name').focus(), 50);
+}
+function closeAddModal(e) {
+  if (e && e.target !== el('add-overlay')) return;
+  el('add-overlay').classList.remove('open');
+}
+
+function setAddDist(d) {
+  addDist = d;
+  document.querySelectorAll('.add-dist-opt').forEach(el_ =>
+    el_.classList.toggle('active', el_.dataset.d === d));
+}
+
+function onAddNameInput(val) {
+  const box = el('add-suggestions');
+  if (val.length < 2) { box.style.display = 'none'; return; }
+
+  const matches = fuzzySearch(val, allRaces, 5);
+  if (matches.length === 0) { box.style.display = 'none'; return; }
+
+  box.innerHTML = `<div class="suggestions">` + matches.map(({ race, score }) => {
+    const warn = score >= 0.8
+      ? `<div class="sg-warn">⚠️ 高度相似，是这个吗？</div>` : '';
+    return `
+    <div class="suggestion-item" onclick="pickSuggestion(${JSON.stringify(race).replace(/"/g,'&quot;')})">
+      <div class="sg-name">${esc(race.name)}</div>
+      <div class="sg-meta">${formatDate(race.date,race._dateTBD)} · ${esc(race.city)}</div>
+      ${warn}
+    </div>`;
+  }).join('') + `</div>`;
+  box.style.display = '';
+}
+
+function pickSuggestion(race) {
+  el('add-overlay').classList.remove('open');
+  openSheet(race);
+}
+
+function confirmAdd() {
+  const name = el('add-name').value.trim();
+  const date = el('add-date').value;
+  if (!name) { el('add-name').focus(); return; }
+  if (!date) { el('add-date').focus(); return; }
+  addManualToMyList(name, date, addDist);
+  el('add-overlay').classList.remove('open');
+}
+
+// ── Fuzzy search ───────────────────────────────────────────────────────────────
+function normStr(s) {
+  return s.replace(/^\d{4}\s*/,'').replace(/[·・\s「」【】《》""''（）()]/g,'').toLowerCase();
+}
+function charBigrams(s) {
+  const bg = new Set();
+  for (let i = 0; i < s.length - 1; i++) bg.add(s.slice(i, i+2));
+  return bg;
+}
+function fuzzyScore(a, b) {
+  const na = normStr(a), nb = normStr(b);
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.95;
+  const bgA = charBigrams(na), bgB = charBigrams(nb);
+  let common = 0;
+  for (const bg of bgA) if (bgB.has(bg)) common++;
+  return common / Math.max(bgA.size, bgB.size, 1);
+}
+function fuzzySearch(query, races, maxResults) {
+  return races
+    .map(r => ({ race: r, score: fuzzyScore(query, r.name) }))
+    .filter(x => x.score >= 0.35)
+    .sort((a,b) => b.score - a.score)
+    .slice(0, maxResults);
+}
+
+// ── Scrape ─────────────────────────────────────────────────────────────────────
+async function runScrape() {
+  const btn = el('btn-scrape');
+  btn.classList.add('running'); btn.disabled = true;
+  btn.querySelector('span').textContent = '爬取中…';
+  openTerminal();
+  appendTerm('▶ 开始爬取…\n', '');
+  try {
+    await streamPost('/api/scrape');
+    appendTerm('\n▶ 合并分析…\n', '');
+    await streamPost('/api/merge');
+    appendTerm('\n✓ 完成，刷新中…\n', '');
+    await loadData();
+  } catch(e) {
+    appendTerm(`\n✗ ${e}\n`, 'term-err');
+  } finally {
+    btn.classList.remove('running'); btn.disabled = false;
+    btn.querySelector('span').textContent = '更新爬虫';
+  }
+}
+
+async function streamPost(url) {
+  const res = await fetch(url, { method:'POST' });
+  const rdr = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await rdr.read();
+    if (done) break;
+    buf += dec.decode(value, { stream:true });
+    const lines = buf.split('\n'); buf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const msg = JSON.parse(line.slice(6));
+        if (msg.type === 'out') appendTerm(msg.text, '');
+        if (msg.type === 'err') appendTerm(msg.text, 'term-err');
+      } catch {}
+    }
+  }
+}
+
+// ── Terminal ───────────────────────────────────────────────────────────────────
+function openTerminal() {
+  el('terminal-wrap').classList.add('open');
+  el('terminal-toggle').textContent = '▼ 收起';
+}
+function toggleTerminal() {
+  const open = el('terminal-wrap').classList.toggle('open');
+  el('terminal-toggle').textContent = open ? '▼ 收起' : '▲ 展开';
+}
+function appendTerm(text, cls) {
+  const body = el('terminal-body');
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  body.appendChild(span);
+  body.scrollTop = body.scrollHeight;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function el(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDate(dateStr, tbd) {
+  if (!dateStr) return '日期未定';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (tbd) return `${d.getFullYear()}年${d.getMonth()+1}月（待定）`;
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+}
+// Location label: avoid "重庆 · 重庆" when city === province
+function locLabel(r) {
+  const p = esc(r.province || '');
+  const c = esc(r.city || '');
+  if (!p && !c) return '';
+  if (!c || p === c) return p || c;
+  if (!p) return c;
+  return `${p} · ${c}`;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
