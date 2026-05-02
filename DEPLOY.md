@@ -20,6 +20,8 @@
 
 ## 第一部分：GitHub 上传代码
 
+> 当前状态：已完成。仓库地址为 `https://github.com/angusggsimid/marathon`，分支为 `main`。
+
 ### 1-1. 安装 Git（已有则跳过）
 
 打开终端，输入：
@@ -35,8 +37,8 @@ git --version
 ### 1-3. 创建新仓库
 
 1. 登录 GitHub 后，点击右上角的 **"+"** → **"New repository"**
-2. Repository name 填：`marathon-training`（或任意名字）
-3. 选择 **Public**（公开，Vercel 免费版需要公开仓库）
+2. Repository name 填：`marathon`
+3. 选择 **Private**（上线前先保持私有更稳）
 4. **不要**勾选 "Add a README" 等选项
 5. 点击 **"Create repository"**
 6. 创建完成后页面会显示一段命令，复制备用
@@ -54,7 +56,7 @@ git init
 git add .
 git commit -m "first commit"
 git branch -M main
-git remote add origin https://github.com/你的用户名/marathon-training.git
+git remote add origin https://github.com/你的用户名/marathon.git
 git push -u origin main
 ```
 
@@ -73,7 +75,7 @@ git push -u origin main
 ### 2-2. 导入项目
 
 1. 登录后点击 **"Add New… → Project"**
-2. 找到 `marathon-training` 仓库，点击 **"Import"**
+2. 找到 `marathon` 仓库，点击 **"Import"**
 3. 配置页面：
    - **Framework Preset**：Vercel 会自动识别为 Vite，无需修改
    - **Root Directory**：留空（保持 `./`）
