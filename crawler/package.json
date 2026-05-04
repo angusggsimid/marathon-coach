@@ -6,9 +6,9 @@
   "scripts": {
     "scrape":          "tsx src/index.ts",
     "scrape:zuicool":  "tsx src/index.ts --source zuicool",
-    "scrape:gusto":    "tsx src/index.ts --source gusto",
     "scrape:nowrun":   "tsx src/index.ts --source nowrun",
     "scrape:chinarun": "tsx src/index.ts --source chinarun",
+    "scrape:marathonbm": "tsx src/index.ts --source marathonbm",
     "scrape:dry":      "tsx src/index.ts --dry-run",
     "merge":           "tsx src/merge.ts",
     "serve":           "tsx src/server.ts",

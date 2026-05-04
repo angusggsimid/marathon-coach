@@ -17,14 +17,6 @@ export const SOURCE_POLICIES: SourcePolicy[] = [
     defaultScope: '默认抓公开目录和公开报名页',
   },
   {
-    source: 'gusto',
-    publicPages: '公开赛事列表页的 SSR/Nuxt 数据',
-    allowedData: '赛事名称、日期、城市、省份、距离、报名状态、公开赛事链接',
-    blockedData: '不调用登录态接口、不提交表单、不绕过权限',
-    requestPolicy: '优先读取公开页面，一次请求即可完成；API fallback 串行低频请求',
-    defaultScope: '默认读取公开页面 payload',
-  },
-  {
     source: 'nowrun',
     publicPages: '公开首页赛事链接和公开赛事详情页',
     allowedData: '结构化 race 对象中的赛事公开信息',
@@ -39,6 +31,14 @@ export const SOURCE_POLICIES: SourcePolicy[] = [
     blockedData: '强过滤直通名额、酒店套餐、旅游产品、线上跑、越野和缺少可信地点的数据',
     requestPolicy: '默认只抓每个分类第一页，分类之间保留延迟',
     defaultScope: '默认仅作为辅助报名源补充',
+  },
+  {
+    source: 'marathonbm',
+    publicPages: '公开赛事列表接口和公开赛事详情接口',
+    allowedData: '赛事名称、比赛日期、省市区、报名状态、公开赛事详情链接',
+    blockedData: '不抓登录态、不抓报名表单、不抓参赛者个人资料或订单信息',
+    requestPolicy: '默认最多读取 120 条公开列表，并按赛事详情低频补充地点',
+    defaultScope: '默认作为辅助报名源补充公开报名赛事',
   },
 ];
 

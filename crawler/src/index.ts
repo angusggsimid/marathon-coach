@@ -4,9 +4,9 @@
  * Usage:
  *   npm run scrape                    # all sources → output/scraped-races.json
  *   npm run scrape:zuicool            # zuicool only
- *   npm run scrape:gusto              # gusto only
  *   npm run scrape:nowrun             # nowrun only
  *   npm run scrape:chinarun           # chinarun only
+ *   npm run scrape:marathonbm         # marathonbm only
  *   npm run scrape:dry                # dry run (print, no file write)
  *   npm run scrape -- --limit 10      # limit to 10 races per source
  *   npm run scrape -- --details       # fetch zuicool detail pages for precise distances
@@ -17,9 +17,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { RaceEvent, ScrapeResult } from './types.js';
 import { scrapeZuicool } from './scrapers/zuicool.js';
-import { scrapeGusto   } from './scrapers/gusto.js';
 import { scrapeNowrun  } from './scrapers/nowrun.js';
 import { scrapeChinarun } from './scrapers/chinarun.js';
+import { scrapeMarathonbm } from './scrapers/marathonbm.js';
 import { SOURCE_POLICIES, getSourcePolicy } from './sourcePolicies.js';
 import { evaluateRaceQuality } from './utils.js';
 import type { RaceQualityIssue } from './utils.js';
@@ -59,11 +59,6 @@ async function main() {
     results.push(r);
   }
 
-  if (!sourceArg || sourceArg === 'gusto') {
-    const r = await scrapeGusto({ limit, verbose });
-    results.push(r);
-  }
-
   if (!sourceArg || sourceArg === 'nowrun') {
     const r = await scrapeNowrun({ limit, verbose });
     results.push(r);
@@ -71,6 +66,11 @@ async function main() {
 
   if (!sourceArg || sourceArg === 'chinarun') {
     const r = await scrapeChinarun({ limit, verbose });
+    results.push(r);
+  }
+
+  if (!sourceArg || sourceArg === 'marathonbm') {
+    const r = await scrapeMarathonbm({ limit, verbose });
     results.push(r);
   }
 

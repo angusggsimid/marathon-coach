@@ -315,6 +315,6 @@ export function sleep(ms: number): Promise<void> {
 
 // ─── ID generation ────────────────────────────────────────────────────────────
 
-export function makeId(source: 'zc' | 'gt' | 'nr' | 'cr', sourceId: string): string {
+export function makeId(source: 'zc' | 'gt' | 'nr' | 'cr' | 'mb', sourceId: string): string {
   return `${source}-${sourceId}`;
 }
