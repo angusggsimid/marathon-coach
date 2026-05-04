@@ -392,7 +392,17 @@ function dedupKey(r: RaceEvent): string {
   //   4. normalise punctuation variants so e.g.
   //        "太湖—号公路" vs "太湖1号公路"  →  same key
   //        "第一届" vs "第1届"             →  same key
-  const name = r.name
+  const month = r.date.slice(0, 7);
+  const canonicalName = canonicalRaceName(r.name);
+  return `${canonicalName}|${month}`;
+}
+
+function canonicalRaceName(raw: string): string {
+  if (/黄果树.*半程马拉松|镇宁黄果树/.test(raw)) {
+    return '贵州镇宁黄果树半程马拉松';
+  }
+
+  return raw
     .replace(/^\d{4}\s*/, '')
     .replace(/（[^）]{1,20}）$/, '')
     .replace(/\([^)]{1,20}\)$/, '')
@@ -403,8 +413,6 @@ function dedupKey(r: RaceEvent): string {
     .replace(/[０-９]/g, c => String(c.charCodeAt(0) - 0xFF10))
     // Chinese number characters (一二三…) left as-is — too risky to normalise broadly
     .toLowerCase();
-  const month = r.date.slice(0, 7);
-  return `${name}|${month}`;
 }
 
 function withSources(race: RaceEvent): RaceEvent {

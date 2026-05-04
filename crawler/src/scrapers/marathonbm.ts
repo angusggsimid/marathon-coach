@@ -6,6 +6,7 @@
  */
 
 import type { RaceEvent, RaceStatus, ScrapeResult } from '../types.js';
+import * as cheerio from 'cheerio';
 import {
   fetchJson,
   inferDistances,
@@ -49,6 +50,7 @@ interface MarathonbmDetail extends MarathonbmListItem {
   province?: string;
   city?: string;
   area?: string;
+  richText?: string;
 }
 
 export async function scrapeMarathonbm(opts: {
@@ -100,7 +102,8 @@ async function fetchDetail(id: string): Promise<MarathonbmDetail | null> {
 function itemToRace(item: MarathonbmDetail | MarathonbmListItem): RaceEvent | null {
   const sourceId = item.id == null ? '' : String(item.id);
   const name = (item.title ?? '').trim();
-  const date = normalizeDate(item.matchStartDate ?? '');
+  const date = extractRaceDateFromRichText((item as MarathonbmDetail).richText ?? '')
+    ?? normalizeDate(item.matchStartDate ?? '');
   if (!sourceId || !name || !date) return null;
 
   return {
@@ -122,6 +125,15 @@ function itemToRace(item: MarathonbmDetail | MarathonbmListItem): RaceEvent | nu
 function normalizeDate(raw: string): string | null {
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function extractRaceDateFromRichText(html: string): string | null {
+  if (!html) return null;
+  const text = cheerio.load(html).text().replace(/\s+/g, ' ');
+  const timeSection = text.match(/(?:比赛|竞赛|活动|开跑)?时间[：:]\s*([^。；;\n]+)/);
+  const scope = timeSection?.[1] ?? text;
+  const match = scope.match(/(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/);
+  return match ? `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}` : null;
 }
 
 function normalizeProvince(raw: string): string {
