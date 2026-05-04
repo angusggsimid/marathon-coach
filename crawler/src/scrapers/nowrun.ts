@@ -16,7 +16,7 @@ import {
 const HOME_URL = 'https://www.nowrun.cn/';
 const DETAIL_BASE = 'https://www.nowrun.cn/race';
 const CONCURRENCY = 4;
-const DEFAULT_DETAIL_LIMIT = 120;
+const DEFAULT_DETAIL_LIMIT = 492;
 
 interface NowrunRace {
   id?: number | string;

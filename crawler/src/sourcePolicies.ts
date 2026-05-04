@@ -29,8 +29,8 @@ export const SOURCE_POLICIES: SourcePolicy[] = [
     publicPages: '公开首页赛事链接和公开赛事详情页',
     allowedData: '结构化 race 对象中的赛事公开信息',
     blockedData: '不抓用户内容、不抓报名表单、不抓登录后页面',
-    requestPolicy: '默认最多抓 120 个详情页，并限制并发与请求间隔',
-    defaultScope: '默认抓首页前 120 个详情页；手动 limit 才扩大范围',
+    requestPolicy: '默认最多抓 492 个详情页，并限制并发与请求间隔',
+    defaultScope: '默认抓首页公开发现的 492 个详情页；手动 limit 可缩小范围',
   },
   {
     source: 'chinarun',

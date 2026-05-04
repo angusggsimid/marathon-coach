@@ -366,16 +366,17 @@ function dedup(races: RaceEvent[]): RaceEvent[] {
     const existing = seen.get(key);
 
     if (!existing) {
-      seen.set(key, race);
+      seen.set(key, withSources(race));
       continue;
     }
 
-    // Merge: prefer 'open' status, keep more complete distances
+    // Merge: prefer 'open' status, keep more complete distances, retain source confirmations.
     const merged: RaceEvent = {
       ...existing,
       status: mergePriority(existing.status, race.status),
       distances: mergeDistances(existing.distances, race.distances),
       registrationUrl: existing.registrationUrl ?? race.registrationUrl,
+      sources: mergeSources(existing, race),
     };
     seen.set(key, merged);
   }
@@ -404,6 +405,32 @@ function dedupKey(r: RaceEvent): string {
     .toLowerCase();
   const month = r.date.slice(0, 7);
   return `${name}|${month}`;
+}
+
+function withSources(race: RaceEvent): RaceEvent {
+  return {
+    ...race,
+    sources: mergeSources(race),
+  };
+}
+
+function mergeSources(...races: RaceEvent[]): string[] {
+  const sources = new Set<string>();
+
+  for (const race of races) {
+    for (const source of race.sources ?? []) {
+      sources.add(normalizeSource(source));
+    }
+    if (race._source) {
+      sources.add(normalizeSource(race._source));
+    }
+  }
+
+  return Array.from(sources).sort();
+}
+
+function normalizeSource(source: string): string {
+  return source === 'zuicool-events' ? 'zuicool' : source;
 }
 
 const STATUS_PRIORITY: Record<string, number> = {

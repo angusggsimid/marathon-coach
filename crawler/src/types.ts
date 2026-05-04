@@ -20,6 +20,7 @@ export interface RaceEvent {
   altitude?:        number;
   registrationUrl?: string;
   note?:            string;
+  sources?:         string[];       // normalized source keys that confirmed this race
   _source?:         string;         // source key, stripped on final export
   _sourceId?:       string;         // original numeric ID from the source site
   _dateTBD?:        boolean;        // true when official date not yet announced ("待定")

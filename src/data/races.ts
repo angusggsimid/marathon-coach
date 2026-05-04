@@ -22,6 +22,7 @@ export interface RaceEvent {
   altitude?: number;            // metres above sea level (notable if >1500)
   registrationUrl?: string;
   note?: string;
+  sources?: string[];
 }
 
 export const RACES: RaceEvent[] = [
