@@ -150,12 +150,31 @@ export function ProfileForm() {
   const extraRaceCount = Math.max(0, myRaces.length - 1);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 pb-32">
+    <form onSubmit={handleSubmit} className="space-y-3 pb-10">
 
       {/* ── Hero header ── */}
       <div className="pt-2 pb-4">
         <h2 className="text-3xl font-bold tracking-tight text-white">备赛计划</h2>
         <p className="text-[var(--color-label-2)] text-sm mt-1">填写目标与成绩，30 秒生成专属课表</p>
+      </div>
+
+      <div className="bg-[var(--color-surface)] rounded-2xl px-4 py-4 border border-[var(--color-accent)]/15">
+        <p className="text-[12px] font-semibold text-[var(--color-accent)] mb-3">从选赛到开练，只走三步</p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { step: '1', title: '选比赛', desc: primaryRace ? '已同步目标' : '可先跳过' },
+            { step: '2', title: '填成绩', desc: '至少一项' },
+            { step: '3', title: '看今天', desc: '生成后直达' },
+          ].map(item => (
+            <div key={item.step} className="bg-[var(--color-surface-2)] rounded-xl px-3 py-3 min-w-0">
+              <div className="w-5 h-5 rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)] text-[11px] font-bold flex items-center justify-center mb-2">
+                {item.step}
+              </div>
+              <p className="text-[13px] font-semibold text-white leading-tight">{item.title}</p>
+              <p className="text-[10px] text-[var(--color-label-3)] mt-1 leading-tight">{item.desc}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Card: 目标赛事 ── */}
@@ -414,9 +433,9 @@ export function ProfileForm() {
         </div>
       )}
 
-      {/* ── Submit (sticky) ── */}
-      <div className="sticky bottom-[72px] z-30 -mx-4 px-4">
-        <div className="bg-gradient-to-t from-[var(--color-bg)] via-[var(--color-bg)]/95 to-transparent pt-5 pb-3">
+      {/* ── Submit ── */}
+      <div className="pt-3">
+        <div className="pb-3">
           <button
             type="submit"
             className={cn(

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Search, X, MapPin, Flag, Star, Trash2, ChevronDown, ChevronRight,
-  ExternalLink, Globe,
+  ExternalLink, Globe, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useStore } from '../store/useStore';
@@ -25,6 +25,7 @@ export interface UnifiedRace {
   note?:            string;
   _dateTBD?:        boolean;
   _source?:         string;
+  sources?:         string[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -59,6 +60,24 @@ const TERRAIN_LABEL: Record<string, string> = { flat: '平路', hilly: '起伏',
 
 const DIST_LABEL: Record<string, string> = { full: '全马', half: '半马', '10k': '10K' };
 
+type RaceDataSource = 'json' | 'api' | 'seed';
+
+const DATA_SOURCE_LABEL: Record<RaceDataSource, string> = {
+  json: '线上赛事库',
+  api: '爬虫服务',
+  seed: '离线备用库',
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  zuicool: '最酷',
+  'zuicool-events': '最酷',
+  'zuicool-reg': '最酷报名',
+  nowrun: '闹跑',
+  chinarun: 'CHINARUN',
+  marathonbm: '马拉松报名',
+  manual: '人工整理',
+};
+
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
 function classify(r: UnifiedRace): 'open' | 'upcoming' | 'tbd' | 'past' {
@@ -82,6 +101,34 @@ function formatDate(dateStr: string, tbd?: boolean): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   if (tbd) return `${y}年${m}月（待定）`;
   return `${y}年${m}月${d}日`;
+}
+
+function formatGeneratedAt(iso?: string): string {
+  if (!iso) return '本地内置数据';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '更新时间未知';
+  return d.toLocaleString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function sourceKeyLabel(source: string): string {
+  return SOURCE_LABEL[source] ?? source;
+}
+
+function raceSourceKeys(r: UnifiedRace): string[] {
+  const raw = r.sources && r.sources.length > 0 ? r.sources : r._source ? [r._source] : [];
+  return [...new Set(raw.filter(Boolean))];
+}
+
+function sourceSummary(r: UnifiedRace): string {
+  const keys = raceSourceKeys(r);
+  if (keys.length === 0) return '来源待补充';
+  return keys.map(sourceKeyLabel).join(' / ');
 }
 
 /** Normalise the hand-curated seed races into UnifiedRace shape */
@@ -129,24 +176,54 @@ export function RaceTab() {
   const { myRaces, addMyRace, removeMyRace, isPlanGenerated, setActiveTab } = useStore();
 
   // ── Data loading ──
-  const [races, setRaces]     = useState<UnifiedRace[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [source, setSource]   = useState<'crawler' | 'seed'>('seed');
+  const [races, setRaces]       = useState<UnifiedRace[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [dataMeta, setDataMeta] = useState<{
+    source: RaceDataSource;
+    generatedAt?: string;
+    error?: string;
+  }>({ source: 'seed' });
 
   useEffect(() => {
-    fetch('/api/data')
-      .then(r => r.json())
-      .then(data => {
-        const list: UnifiedRace[] = data.races ?? [];
-        if (list.length > 0) {
-          setRaces(list);
-          setSource('crawler');
-        } else {
-          setRaces(SEED_RACES.map(normaliseSeed));
+    let cancelled = false;
+
+    async function loadRaces() {
+      setLoading(true);
+      const endpoints: { url: string; source: RaceDataSource }[] = [
+        { url: '/races.json', source: 'json' },
+        { url: '/api/data', source: 'api' },
+      ];
+      let lastError = '';
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint.url, { cache: 'no-store' });
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+          const data: { races?: UnifiedRace[]; generatedAt?: string } = await response.json();
+          const list = data.races ?? [];
+          if (list.length > 0) {
+            if (!cancelled) {
+              setRaces(list);
+              setDataMeta({ source: endpoint.source, generatedAt: data.generatedAt });
+              setLoading(false);
+            }
+            return;
+          }
+          lastError = `${endpoint.url} 没有赛事数据`;
+        } catch (err) {
+          lastError = `${endpoint.url}: ${err instanceof Error ? err.message : '读取失败'}`;
         }
-      })
-      .catch(() => setRaces(SEED_RACES.map(normaliseSeed)))
-      .finally(() => setLoading(false));
+      }
+
+      if (!cancelled) {
+        setRaces(SEED_RACES.map(normaliseSeed));
+        setDataMeta({ source: 'seed', error: lastError });
+        setLoading(false);
+      }
+    }
+
+    loadRaces();
+    return () => { cancelled = true; };
   }, []);
 
   // ── Filter state ──
@@ -195,6 +272,21 @@ export function RaceTab() {
     const tbdCount      = races.filter(r => classify(r) === 'tbd').length;
     const pastCount     = races.filter(r => classify(r) === 'past').length;
     return { openCount, upcomingCount, tbdCount, pastCount };
+  }, [races]);
+
+  const dataTrust = useMemo(() => {
+    const keys = new Set<string>();
+    let multiSourceCount = 0;
+    for (const race of races) {
+      const raceKeys = raceSourceKeys(race);
+      if (raceKeys.length > 1) multiSourceCount += 1;
+      raceKeys.forEach(k => keys.add(k));
+    }
+    const names = [...keys].map(sourceKeyLabel);
+    return {
+      sourceNames: names.length > 0 ? names : ['人工整理'],
+      multiSourceCount,
+    };
   }, [races]);
 
   // ── Province list ──
@@ -353,6 +445,43 @@ export function RaceTab() {
             <span className="text-[10px] text-[var(--color-label-4)] mt-1">已结束</span>
           </div>
         </div>
+
+        {!loading && (
+          <div className={cn(
+            'rounded-2xl px-4 py-3 mb-3 border',
+            dataMeta.source === 'seed'
+              ? 'bg-[var(--color-orange)]/8 border-[var(--color-orange)]/25'
+              : 'bg-[var(--color-surface)] border-[var(--color-separator)]'
+          )}>
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0',
+                dataMeta.source === 'seed' ? 'bg-[var(--color-orange)]/15' : 'bg-[var(--color-accent)]/12'
+              )}>
+                {dataMeta.source === 'seed'
+                  ? <AlertTriangle className="w-4 h-4 text-[var(--color-orange)]" />
+                  : <ShieldCheck className="w-4 h-4 text-[var(--color-accent)]" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[13px] font-semibold text-white">{DATA_SOURCE_LABEL[dataMeta.source]} · {races.length} 场</p>
+                  <span className="text-[10px] text-[var(--color-label-3)] whitespace-nowrap">
+                    {formatGeneratedAt(dataMeta.generatedAt)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--color-label-3)] mt-1 leading-relaxed">
+                  来源：{dataTrust.sourceNames.join(' / ')}
+                  {dataTrust.multiSourceCount > 0 && ` · ${dataTrust.multiSourceCount} 场多源确认`}
+                </p>
+                {dataMeta.source === 'seed' && (
+                  <p className="text-[11px] text-[var(--color-orange)] mt-1 leading-relaxed">
+                    当前使用离线备用数据，赛事数量会少于正式发布库。
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Search ── */}
         <div className="relative mb-3">
@@ -586,7 +715,7 @@ export function RaceTab() {
         {/* Data source hint */}
         {!loading && (
           <p className="text-center text-[10px] text-[var(--color-label-4)] mt-2">
-            {source === 'crawler' ? `爬虫数据 · ${races.length} 场` : `本地种子数据 · ${races.length} 场`}
+            {DATA_SOURCE_LABEL[dataMeta.source]} · {races.length} 场 · {formatGeneratedAt(dataMeta.generatedAt)}
           </p>
         )}
 
@@ -775,10 +904,21 @@ export function RaceTab() {
                 <InfoCell label="日期" value={formatDate(sheet.date, sheet._dateTBD)} />
                 <InfoCell label="城市" value={locLabel(sheet)} />
                 <InfoCell label="赛道" value={TERRAIN_LABEL[sheet.terrain] ?? '平路'} />
+                <InfoCell
+                  label={raceSourceKeys(sheet).length > 1 ? '多源确认' : '数据来源'}
+                  value={sourceSummary(sheet)}
+                  accent={raceSourceKeys(sheet).length > 1}
+                />
                 {sheet.altitude && sheet.altitude > 1000 && (
                   <InfoCell label="海拔" value={`${sheet.altitude.toLocaleString()} m`} accent />
                 )}
               </div>
+
+              {raceSourceKeys(sheet).length > 1 && (
+                <p className="text-[12px] text-[var(--color-label-2)] leading-relaxed bg-[var(--color-accent)]/8 border border-[var(--color-accent)]/18 rounded-xl px-4 py-3 mb-4">
+                  多个公开来源匹配到同一赛事，日期、城市和项目可信度更高；报名前仍建议以官网页面为准。
+                </p>
+              )}
 
               {sheet.note && (
                 <p className="text-[12px] text-[var(--color-label-2)] leading-relaxed bg-[var(--color-surface-2)] rounded-xl px-4 py-3 mb-4">{sheet.note}</p>
@@ -950,6 +1090,11 @@ function RaceCardGroup({
                         {race.label && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ color: LABEL_CONFIG[race.label].color, background: LABEL_CONFIG[race.label].bg }}>
                             {LABEL_CONFIG[race.label].text}
+                          </span>
+                        )}
+                        {raceSourceKeys(race).length > 1 && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[var(--color-accent)]/12 text-[var(--color-accent)]">
+                            多源
                           </span>
                         )}
                       </div>

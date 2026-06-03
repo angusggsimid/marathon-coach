@@ -5,7 +5,7 @@ import { useEffectivePlan } from '../hooks/useEffectivePlan';
 import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import type { CheckInMessage } from '../utils/checkin-messages';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
 import { downloadAllFIT } from '../utils/export-fit';
 import { syncPlanToICU } from '../utils/intervals-icu';
@@ -121,13 +121,15 @@ function CheckInModal({ workout, existing, onSave, onClose }: CheckInModalProps)
 type ICUView = 'menu' | 'setup' | 'syncing' | 'done';
 
 export function CalendarView() {
-  const { profile, completions, logCompletion, getWeeklyAdaptation, icuApiKey, icuAthleteId, saveICUCredentials, vacations, addVacation, removeVacation } = useStore();
+  const { profile, completions, logCompletion, getWeeklyAdaptation, icuApiKey, icuAthleteId, saveICUCredentials, vacations, addVacation, removeVacation, myRaces } = useStore();
   const plan = useEffectivePlan();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedWorkout, setSelectedWorkout] = useState<DailyWorkout | null>(null);
   const [checkInWorkout, setCheckInWorkout] = useState<DailyWorkout | null>(null);
   const [showExport, setShowExport] = useState(false);
-  const [calView, setCalView] = useState<'calendar' | 'log'>('calendar');
+  const [showShare, setShowShare] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [calView, setCalView] = useState<'week' | 'calendar' | 'log'>('week');
   const [quoteToast, setQuoteToast] = useState<CheckInMessage | null>(null);
 
   // ── Vacation sheet state ──
@@ -174,6 +176,31 @@ export function CalendarView() {
     setTimeout(() => { setIcuView('menu'); setIcuProgress(null); setIcuResult(null); }, 300);
   };
 
+  const copyShareText = async () => {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareText);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = shareText;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2200);
+  };
+
+  const sharePlan = async () => {
+    if (navigator.share) {
+      await navigator.share({ title: '我的马拉松备赛计划', text: shareText });
+      return;
+    }
+    await copyShareText();
+  };
+
   if (!plan || plan.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-20 px-6">
@@ -194,6 +221,26 @@ export function CalendarView() {
   const todayWorkout = plan.find(w => isSameDay(new Date(w.date), new Date()));
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const todayCompletion = completions[todayStr];
+  const currentWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+  const currentWeekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
+  const currentWeekWorkouts = plan
+    .filter(w => {
+      const d = new Date(w.date);
+      return d >= currentWeekStart && d <= currentWeekEnd;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const currentWeekVolume = Math.round(currentWeekWorkouts.reduce((sum, w) => sum + (w.distanceKm || 0), 0) * 10) / 10;
+  const currentWeekWorkoutCount = currentWeekWorkouts.filter(w => w.workoutType !== 'Rest').length;
+  const targetRace = myRaces.find(r => r.date === profile.raceDate && !r.dateTBD);
+  const targetRaceName = targetRace?.name ?? (profile.raceType === 'full' ? '全马目标赛' : '半马目标赛');
+  const shareText = [
+    `我正在备赛：${targetRaceName}`,
+    `比赛日：${profile.raceDate}`,
+    `本周计划：${currentWeekVolume}km · ${currentWeekWorkoutCount} 节课`,
+    todayWorkout ? `今天训练：${workoutTitle(todayWorkout)}${todayWorkout.distanceKm ? ` · ${todayWorkout.distanceKm}km` : ''}` : '今天训练：未安排',
+    '用马拉松备赛生成训练计划',
+  ].join('\n');
 
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
   const prevMonth = () => setCurrentMonth(addMonths(currentMonth, -1));
@@ -266,7 +313,7 @@ export function CalendarView() {
         <div
           key={day.toString()}
           className={cn(
-            'min-h-[108px] p-2 border-b border-r border-[var(--color-separator)] flex flex-col',
+            'min-h-[92px] p-1.5 border-b border-r border-[var(--color-separator)] flex flex-col',
             !isCurrentMonth ? 'opacity-30' : '',
             isTodayDate ? 'bg-[var(--color-accent)]/5' : '',
             workout?.workoutType === 'Race' ? 'bg-[var(--color-yellow)]/5' : '',
@@ -277,7 +324,7 @@ export function CalendarView() {
           {/* Date number */}
           <div className="flex items-start justify-between">
             <span className={cn(
-              'text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full',
+              'text-[13px] font-semibold w-6 h-6 flex items-center justify-center rounded-full',
               isTodayDate ? 'bg-[var(--color-accent)] text-black' : 'text-[var(--color-label-2)]'
             )}>
               {format(day, 'd')}
@@ -292,31 +339,10 @@ export function CalendarView() {
             </div>
           </div>
 
-          {/* Workout badge + desc */}
+          {/* Workout summary */}
           {workout && (
-            <div className="mt-1.5 flex-1 space-y-1">
-              <WorkoutBadge type={workout.workoutType} />
-              {/* Taper / race-day overlay pill */}
-              {workout.workoutType === 'Race' && (
-                <span className="inline-block text-[8px] font-bold px-1 py-0.5 rounded bg-[var(--color-yellow)]/20 text-[var(--color-yellow)] leading-none">🏁 赛事</span>
-              )}
-              {workout.workoutType !== 'Race' && workout.description?.includes('【减量') && (
-                <span className="inline-block text-[8px] font-bold px-1 py-0.5 rounded bg-[var(--color-orange)]/15 text-[var(--color-orange)] leading-none">↓ 减量</span>
-              )}
-              {workout.workoutType !== 'Race' && workout.description?.includes('赛后第') && (
-                <span className="inline-block text-[8px] font-bold px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 leading-none">↺ 恢复</span>
-              )}
-              {workout.description?.startsWith('休假') && (
-                <span className="inline-block text-[8px] font-bold px-1 py-0.5 rounded bg-zinc-700/60 text-zinc-400 leading-none">🏖 休假</span>
-              )}
-              {workout.description?.includes('【复训第') && (
-                <span className="inline-block text-[8px] font-bold px-1 py-0.5 rounded bg-purple-500/15 text-purple-400 leading-none">↑ 复训</span>
-              )}
-              {workout.workoutType !== 'Rest' && (
-                <p className="text-[9px] text-[var(--color-label-3)] line-clamp-2 leading-tight">
-                  {workout.description.split(' - ')[0].replace(/【.*?】/, '')}
-                </p>
-              )}
+            <div className="mt-1.5 flex-1">
+              <CalendarWorkoutPill type={workout.workoutType} />
             </div>
           )}
 
@@ -379,20 +405,31 @@ export function CalendarView() {
         {/* Segmented control */}
         <div className="flex items-center bg-[var(--color-surface)] rounded-xl p-0.5 gap-0.5">
           <button
+            onClick={() => setCalView('week')}
+            className={cn(
+              'text-[13px] font-medium px-3 py-1.5 rounded-[10px] transition-all',
+              calView === 'week'
+                ? 'bg-[var(--color-surface-2)] text-white shadow-sm'
+                : 'text-[var(--color-label-3)]'
+            )}
+          >
+            本周
+          </button>
+          <button
             onClick={() => setCalView('calendar')}
             className={cn(
-              'text-[13px] font-medium px-3.5 py-1.5 rounded-[10px] transition-all',
+              'text-[13px] font-medium px-3 py-1.5 rounded-[10px] transition-all',
               calView === 'calendar'
                 ? 'bg-[var(--color-surface-2)] text-white shadow-sm'
                 : 'text-[var(--color-label-3)]'
             )}
           >
-            日历
+            月历
           </button>
           <button
             onClick={() => setCalView('log')}
             className={cn(
-              'text-[13px] font-medium px-3.5 py-1.5 rounded-[10px] transition-all',
+              'text-[13px] font-medium px-3 py-1.5 rounded-[10px] transition-all',
               calView === 'log'
                 ? 'bg-[var(--color-surface-2)] text-white shadow-sm'
                 : 'text-[var(--color-label-3)]'
@@ -401,12 +438,20 @@ export function CalendarView() {
             日志
           </button>
         </div>
-        {calView === 'calendar' && (
-          <div className="flex items-center gap-2">
+        {calView !== 'log' && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowShare(true)}
+              aria-label="分享计划"
+              title="分享计划"
+              className="w-9 h-9 bg-[var(--color-surface)] text-[var(--color-label-2)] rounded-xl flex items-center justify-center active:opacity-60 transition-opacity"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
             <button
               onClick={() => setShowVacation(true)}
               className={cn(
-                'flex items-center gap-1.5 text-[12px] font-medium px-3 py-2 rounded-xl active:opacity-60 transition-opacity',
+                'flex items-center gap-1 text-[12px] font-medium px-2.5 py-2 rounded-xl active:opacity-60 transition-opacity',
                 vacations.length > 0
                   ? 'bg-purple-500/15 text-purple-400'
                   : 'bg-[var(--color-surface)] text-[var(--color-label-2)]'
@@ -417,7 +462,7 @@ export function CalendarView() {
             </button>
             <button
               onClick={() => setShowExport(true)}
-              className="flex items-center gap-1.5 bg-[var(--color-surface)] text-[var(--color-label-2)] text-[12px] font-medium px-3 py-2 rounded-xl active:opacity-60 transition-opacity"
+              className="flex items-center gap-1 bg-[var(--color-surface)] text-[var(--color-label-2)] text-[12px] font-medium px-2.5 py-2 rounded-xl active:opacity-60 transition-opacity"
             >
               <Download className="w-3.5 h-3.5" />
               导出
@@ -429,7 +474,7 @@ export function CalendarView() {
       {/* ── Log view ── */}
       {calView === 'log' && <TrainingLog />}
 
-      {calView === 'calendar' && (<>
+      {calView !== 'log' && (<>
 
       {/* ── Vacation sheet ── */}
       {showVacation && (
@@ -766,6 +811,71 @@ export function CalendarView() {
         </div>
       )}
 
+      {/* ── Share sheet ── */}
+      {showShare && (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setShowShare(false)}
+        >
+          <div
+            className="bg-[var(--color-surface)] rounded-t-3xl w-full max-w-lg pb-safe animate-in slide-in-from-bottom duration-250"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-9 h-1 rounded-full bg-[var(--color-label-4)]" />
+            </div>
+            <div className="px-5 pb-8">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-[17px] font-semibold text-white">分享备赛计划</p>
+                  <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">适合发给跑友或发到小红书草稿</p>
+                </div>
+                <button
+                  onClick={() => setShowShare(false)}
+                  aria-label="关闭分享"
+                  className="w-8 h-8 rounded-full bg-[var(--color-surface-2)] flex items-center justify-center text-[var(--color-label-2)]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="rounded-3xl p-5 mb-4 bg-[var(--color-surface-2)] border border-[var(--color-separator)]">
+                <p className="text-[12px] font-semibold text-[var(--color-accent)] mb-2">我的马拉松备赛</p>
+                <h3 className="text-[20px] font-bold text-white leading-snug">{targetRaceName}</h3>
+                <p className="text-[12px] text-[var(--color-label-3)] mt-1">比赛日 {profile.raceDate} · 距比赛 {Math.max(weeksToRace, 0)} 周</p>
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <ShareMetric label="本周跑量" value={`${currentWeekVolume} km`} />
+                  <ShareMetric label="训练课" value={`${currentWeekWorkoutCount} 节`} />
+                </div>
+                <div className="mt-4 pt-4 border-t border-[var(--color-separator)]">
+                  <p className="text-[11px] text-[var(--color-label-3)] mb-1">今天</p>
+                  <p className="text-[14px] font-semibold text-white">
+                    {todayWorkout ? workoutTitle(todayWorkout) : '未安排训练'}
+                    {todayWorkout?.distanceKm ? ` · ${todayWorkout.distanceKm}km` : ''}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={sharePlan}
+                  className="bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[14px] flex items-center justify-center gap-2"
+                >
+                  <Share2 className="w-4 h-4" /> 系统分享
+                </button>
+                <button
+                  onClick={copyShareText}
+                  className="bg-[var(--color-surface-2)] text-[var(--color-label-2)] font-semibold py-3.5 rounded-2xl text-[14px] flex items-center justify-center gap-2"
+                >
+                  {shareCopied ? <CheckCircle2 className="w-4 h-4 text-[var(--color-accent)]" /> : <Copy className="w-4 h-4" />}
+                  {shareCopied ? '已复制' : '复制文案'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Today card ── */}
       {todayWorkout && (
         <div className="mb-4">
@@ -856,9 +966,82 @@ export function CalendarView() {
         </div>
       )}
 
+      {calView === 'week' && (
+        <div className="bg-[var(--color-surface)] rounded-3xl overflow-hidden mb-4">
+          <div className="px-4 py-4 border-b border-[var(--color-separator)] flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-[var(--color-label-3)] uppercase tracking-wider mb-1">本周训练</p>
+              <h2 className="text-[20px] font-bold text-white">
+                {format(currentWeekStart, 'M月d日', { locale: zhCN })} - {format(currentWeekEnd, 'M月d日', { locale: zhCN })}
+              </h2>
+            </div>
+            <div className="text-right">
+              <p className="text-[22px] font-bold text-[var(--color-accent)] tabular-nums leading-none">{currentWeekVolume}</p>
+              <p className="text-[10px] text-[var(--color-label-3)] mt-1">本周 · {currentWeekWorkoutCount} 节</p>
+            </div>
+          </div>
+          <div>
+            {weekDays.map((dayItem, idx) => {
+              const workout = plan.find(w => isSameDay(new Date(w.date), dayItem));
+              const dateStr = format(dayItem, 'yyyy-MM-dd');
+              const completion = completions[dateStr];
+              const canCheckIn = workout && workout.workoutType !== 'Rest' && (isToday(dayItem) || isPast(dayItem));
+              return (
+                <button
+                  key={dateStr}
+                  disabled={!workout || workout.workoutType === 'Rest'}
+                  onClick={() => workout && workout.workoutType !== 'Rest' && setSelectedWorkout(workout)}
+                  className={cn(
+                    'w-full px-4 py-3.5 flex items-center gap-3 text-left transition-colors',
+                    idx < weekDays.length - 1 && 'border-b border-[var(--color-separator)]',
+                    isToday(dayItem) ? 'bg-[var(--color-accent)]/6' : '',
+                    workout && workout.workoutType !== 'Rest' ? 'active:bg-[var(--color-surface-2)]' : 'cursor-default'
+                  )}
+                >
+                  <div className="w-10 flex-shrink-0 text-center">
+                    <p className={cn('text-[11px] font-semibold', isToday(dayItem) ? 'text-[var(--color-accent)]' : 'text-[var(--color-label-3)]')}>
+                      {format(dayItem, 'EEE', { locale: zhCN })}
+                    </p>
+                    <p className={cn('text-[18px] font-bold leading-none mt-1', isToday(dayItem) ? 'text-white' : 'text-[var(--color-label-2)]')}>
+                      {format(dayItem, 'd')}
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {workout ? <WorkoutBadge type={workout.workoutType} /> : <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-surface-2)] text-[var(--color-label-3)]">未安排</span>}
+                      {completion && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-accent)]/12 text-[var(--color-accent)]">已打卡</span>
+                      )}
+                    </div>
+                    <p className="text-[14px] font-semibold text-white mt-1 truncate">{workout ? workoutTitle(workout) : '自由安排'}</p>
+                    {workout?.targetPace && (
+                      <p className="text-[11px] text-[var(--color-label-3)] mt-0.5">目标配速 {workout.targetPace}</p>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0 text-right">
+                    {workout?.distanceKm && workout.distanceKm > 0 && (
+                      <p className="text-[15px] font-bold text-white tabular-nums">{workout.distanceKm}<span className="text-[10px] text-[var(--color-label-3)] ml-0.5">km</span></p>
+                    )}
+                    {canCheckIn && (
+                      <span
+                        onClick={e => { e.stopPropagation(); setCheckInWorkout(workout); }}
+                        className="inline-block mt-1 text-[10px] font-semibold text-[var(--color-accent)]"
+                      >
+                        {completion ? '修改' : '打卡'}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ACWR card */}
       <ACWRCard plan={plan} completions={completions} />
 
+      {calView === 'calendar' && (
       <div className="bg-[var(--color-surface)] rounded-3xl overflow-hidden mb-8">
         {/* Monthly volume chart */}
         <div className="px-4 pt-5 pb-4 border-b border-[var(--color-separator)]">
@@ -919,6 +1102,7 @@ export function CalendarView() {
 
         <div>{rows}</div>
       </div>
+      )}
 
       {/* Workout Detail Sheet */}
       {selectedWorkout && (
@@ -1169,6 +1353,59 @@ function getACWRZone(acwr: number): { label: string; advice: string; color: stri
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function workoutTitle(workout: DailyWorkout): string {
+  if (workout.workoutType === 'Rest') return '休息或交叉训练';
+  return workout.description.split(' - ')[0].replace(/【.*?】/g, '').trim() || workout.description;
+}
+
+function ShareMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-[var(--color-bg)] px-3 py-3">
+      <p className="text-[10px] text-[var(--color-label-3)] uppercase tracking-wider">{label}</p>
+      <p className="text-[17px] font-bold text-white mt-1">{value}</p>
+    </div>
+  );
+}
+
+function CalendarWorkoutPill({ type }: { type: string }) {
+  const styles: Record<string, string> = {
+    LSD: 'bg-[#BF5AF2]/20 text-[#BF5AF2]',
+    Tempo: 'bg-[#FF9F0A]/20 text-[#FF9F0A]',
+    TempoIntervals: 'bg-[#FF9F0A]/15 text-[#FFB340]',
+    Interval: 'bg-[#FF453A]/20 text-[#FF453A]',
+    Fartlek: 'bg-[#FF375F]/15 text-[#FF375F]',
+    Hills: 'bg-[#FFD60A]/15 text-[#FFD60A]',
+    Progression: 'bg-[#5E5CE6]/20 text-[#7D7AFF]',
+    Cruise: 'bg-[#5AC8FA]/15 text-[#5AC8FA]',
+    Easy: 'bg-[#0A84FF]/15 text-[#0A84FF]',
+    Recovery: 'bg-[#636366]/25 text-[#EBEBF5]/60',
+    MP: 'bg-[#32D74B]/15 text-[#32D74B]',
+    Rest: 'bg-[#636366]/20 text-[#EBEBF5]/45',
+    Race: 'bg-[#FFD60A]/20 text-[#FFD60A]',
+  };
+  const labels: Record<string, string> = {
+    LSD: 'LSD',
+    Tempo: '节奏',
+    TempoIntervals: '节奏',
+    Interval: '间歇',
+    Fartlek: '变速',
+    Hills: '坡',
+    Progression: '渐进',
+    Cruise: '巡航',
+    Easy: '轻松',
+    Recovery: '恢复',
+    MP: 'MP',
+    Rest: '休',
+    Race: '赛',
+  };
+
+  return (
+    <span className={cn('inline-flex max-w-full px-1.5 py-0.5 rounded-md text-[9px] font-semibold leading-none', styles[type] || styles.Rest)}>
+      {labels[type] || type}
+    </span>
+  );
+}
 
 function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Record<string, { status: string }> }) {
   const result = computeACWR(plan, completions);

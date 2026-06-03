@@ -31,6 +31,13 @@ export function TrainingStats() {
         </p>
       </div>
 
+      <div className="bg-[var(--color-accent)]/8 border border-[var(--color-accent)]/18 rounded-2xl px-4 py-3">
+        <p className="text-[13px] text-[var(--color-label-2)] leading-relaxed">
+          <span className="text-[var(--color-accent)] font-semibold">看不懂也没关系：</span>
+          训练页每天会告诉你目标配速。你只要强度课按配速跑，轻松跑和长跑别超过心率上限即可。
+        </p>
+      </div>
+
       {/* Pace Zones */}
       <div>
         <div className="flex items-center justify-between px-1 mb-2">

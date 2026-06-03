@@ -132,7 +132,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       profile: defaultProfile,
       plan: [],
-      activeTab: 'races',
+      activeTab: 'profile',
       isPlanGenerated: false,
       planNeedsRegen: false,
       completions: {},
@@ -148,7 +148,7 @@ export const useStore = create<AppState>()(
       generatePlan: () => {
         const { profile } = get();
         const plan = generateTrainingPlan(profile);
-        set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'stats' });
+        set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'calendar' });
       },
 
       setActiveTab: (tab) => set({ activeTab: tab }),
