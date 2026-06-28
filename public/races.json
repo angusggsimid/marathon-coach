@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-27T06:04:43.773Z",
+  "generatedAt": "2026-06-28T06:40:19.658Z",
   "races": [
     {
       "id": "mb-6018",
@@ -13544,25 +13544,6 @@
       ]
     },
     {
-      "id": "nr-257",
-      "name": "2026武汉空港国际商务新城半程马拉松",
-      "date": "2026-03-15",
-      "city": "武汉",
-      "province": "湖北",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/257",
-      "_source": "nowrun",
-      "_sourceId": "257",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-377",
       "name": "2026眉山仁寿半程马拉松",
       "date": "2026-03-15",
@@ -13577,6 +13558,25 @@
       "registrationUrl": "https://www.sichuanbojiesports.com/",
       "_source": "nowrun",
       "_sourceId": "377",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-257",
+      "name": "2026武汉空港国际商务新城半程马拉松",
+      "date": "2026-03-15",
+      "city": "武汉",
+      "province": "湖北",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/257",
+      "_source": "nowrun",
+      "_sourceId": "257",
       "sources": [
         "nowrun"
       ]
@@ -14140,25 +14140,6 @@
       ]
     },
     {
-      "id": "nr-105",
-      "name": "2026苏州阳澄湖半程马拉松",
-      "date": "2026-03-22",
-      "city": "苏州",
-      "province": "江苏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/105",
-      "_source": "nowrun",
-      "_sourceId": "105",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-326",
       "name": "2026钦州马拉松",
       "date": "2026-03-22",
@@ -14179,21 +14160,20 @@
       ]
     },
     {
-      "id": "nr-135",
-      "name": "2026奉化马拉松",
+      "id": "nr-105",
+      "name": "2026苏州阳澄湖半程马拉松",
       "date": "2026-03-22",
-      "city": "宁波",
-      "province": "浙江",
+      "city": "苏州",
+      "province": "江苏",
       "distances": [
-        "full",
         "half"
       ],
       "terrain": "flat",
       "label": null,
       "status": "closed",
-      "registrationUrl": "http://www.fenghuataohuamarathon.com/",
+      "registrationUrl": "https://www.nowrun.cn/race/105",
       "_source": "nowrun",
-      "_sourceId": "135",
+      "_sourceId": "105",
       "sources": [
         "nowrun"
       ]
@@ -14214,6 +14194,26 @@
       "registrationUrl": "https://www.nowrun.cn/race/137",
       "_source": "nowrun",
       "_sourceId": "137",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-135",
+      "name": "2026奉化马拉松",
+      "date": "2026-03-22",
+      "city": "宁波",
+      "province": "浙江",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "http://www.fenghuataohuamarathon.com/",
+      "_source": "nowrun",
+      "_sourceId": "135",
       "sources": [
         "nowrun"
       ]
@@ -14258,26 +14258,6 @@
       ]
     },
     {
-      "id": "nr-251",
-      "name": "2026“甲骨文杯”安阳马拉松",
-      "date": "2026-03-22",
-      "city": "安阳",
-      "province": "河南",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/251",
-      "_source": "nowrun",
-      "_sourceId": "251",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-259",
       "name": "2026武汉马拉松",
       "date": "2026-03-22",
@@ -14293,6 +14273,26 @@
       "registrationUrl": "https://www.wuhanmarathon.org/",
       "_source": "nowrun",
       "_sourceId": "259",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-251",
+      "name": "2026“甲骨文杯”安阳马拉松",
+      "date": "2026-03-22",
+      "city": "安阳",
+      "province": "河南",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/251",
+      "_source": "nowrun",
+      "_sourceId": "251",
       "sources": [
         "nowrun"
       ]
@@ -14317,25 +14317,6 @@
       ]
     },
     {
-      "id": "nr-379",
-      "name": "2026自贡恐龙半程马拉松",
-      "date": "2026-03-22",
-      "city": "自贡",
-      "province": "四川",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/379",
-      "_source": "nowrun",
-      "_sourceId": "379",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-380",
       "name": "2026广元半程马拉松",
       "date": "2026-03-22",
@@ -14350,6 +14331,25 @@
       "registrationUrl": "https://guangyuan.jinshensports.com/",
       "_source": "nowrun",
       "_sourceId": "380",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-379",
+      "name": "2026自贡恐龙半程马拉松",
+      "date": "2026-03-22",
+      "city": "自贡",
+      "province": "四川",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/379",
+      "_source": "nowrun",
+      "_sourceId": "379",
       "sources": [
         "nowrun"
       ]
@@ -14897,25 +14897,6 @@
       ]
     },
     {
-      "id": "nr-106",
-      "name": "2026苏州环金鸡湖半程马拉松",
-      "date": "2026-03-29",
-      "city": "苏州",
-      "province": "江苏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.suzhou-marathon.com/",
-      "_source": "nowrun",
-      "_sourceId": "106",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-209",
       "name": "2026乐安流坑半程马拉松",
       "date": "2026-03-29",
@@ -14930,6 +14911,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/209",
       "_source": "nowrun",
       "_sourceId": "209",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-106",
+      "name": "2026苏州环金鸡湖半程马拉松",
+      "date": "2026-03-29",
+      "city": "苏州",
+      "province": "江苏",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.suzhou-marathon.com/",
+      "_source": "nowrun",
+      "_sourceId": "106",
       "sources": [
         "nowrun"
       ]
@@ -15033,25 +15033,6 @@
       ]
     },
     {
-      "id": "nr-109",
-      "name": "2026扬州半程马拉松",
-      "date": "2026-03-29",
-      "city": "扬州",
-      "province": "江苏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.yzmls.com/",
-      "_source": "nowrun",
-      "_sourceId": "109",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-302",
       "name": "2026连南半程马拉松",
       "date": "2026-03-29",
@@ -15066,6 +15047,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/302",
       "_source": "nowrun",
       "_sourceId": "302",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-109",
+      "name": "2026扬州半程马拉松",
+      "date": "2026-03-29",
+      "city": "扬州",
+      "province": "江苏",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.yzmls.com/",
+      "_source": "nowrun",
+      "_sourceId": "109",
       "sources": [
         "nowrun"
       ]
@@ -15130,25 +15130,6 @@
       ]
     },
     {
-      "id": "nr-404",
-      "name": "2026贵阳贵安樱花半程马拉松",
-      "date": "2026-03-29",
-      "city": "贵阳",
-      "province": "贵州",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "http://www.guiyangmarathon.com/",
-      "_source": "nowrun",
-      "_sourceId": "404",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-381",
       "name": "2026乐山犍为茉莉之乡半程马拉松",
       "date": "2026-03-29",
@@ -15163,6 +15144,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/381",
       "_source": "nowrun",
       "_sourceId": "381",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-404",
+      "name": "2026贵阳贵安樱花半程马拉松",
+      "date": "2026-03-29",
+      "city": "贵阳",
+      "province": "贵州",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "http://www.guiyangmarathon.com/",
+      "_source": "nowrun",
+      "_sourceId": "404",
       "sources": [
         "nowrun"
       ]
@@ -15970,26 +15970,6 @@
       ]
     },
     {
-      "id": "nr-421",
-      "name": "2026芒市泼水节马拉松",
-      "date": "2026-04-12",
-      "city": "德宏州芒",
-      "province": "云南",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/421",
-      "_source": "nowrun",
-      "_sourceId": "421",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-330",
       "name": "2026黄姚古镇马拉松",
       "date": "2026-04-12",
@@ -16005,6 +15985,26 @@
       "registrationUrl": "https://www.nowrun.cn/race/330",
       "_source": "nowrun",
       "_sourceId": "330",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-421",
+      "name": "2026芒市泼水节马拉松",
+      "date": "2026-04-12",
+      "city": "德宏州芒",
+      "province": "云南",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/421",
+      "_source": "nowrun",
+      "_sourceId": "421",
       "sources": [
         "nowrun"
       ]
@@ -17075,6 +17075,25 @@
       ]
     },
     {
+      "id": "nr-18",
+      "name": "2026天津·宁河七里海半程马拉松",
+      "date": "2026-04-19",
+      "city": "宁河",
+      "province": "天津",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/18",
+      "_source": "nowrun",
+      "_sourceId": "18",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
       "id": "nr-229",
       "name": "2026荣成滨海马拉松",
       "date": "2026-04-19",
@@ -17090,25 +17109,6 @@
       "registrationUrl": "https://rongchengmls.iqilu.com/",
       "_source": "nowrun",
       "_sourceId": "229",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
-      "id": "nr-18",
-      "name": "2026天津·宁河七里海半程马拉松",
-      "date": "2026-04-19",
-      "city": "宁河",
-      "province": "天津",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/18",
-      "_source": "nowrun",
-      "_sourceId": "18",
       "sources": [
         "nowrun"
       ]
@@ -17133,25 +17133,6 @@
       ]
     },
     {
-      "id": "nr-146",
-      "name": "2026杭州富阳半程马拉松",
-      "date": "2026-04-19",
-      "city": "杭州",
-      "province": "浙江",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "http://www.fymls.com/",
-      "_source": "nowrun",
-      "_sourceId": "146",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-254",
       "name": "2026民权马拉松暨第四届申甘林带生态马拉松",
       "date": "2026-04-19",
@@ -17167,6 +17148,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/254",
       "_source": "nowrun",
       "_sourceId": "254",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-146",
+      "name": "2026杭州富阳半程马拉松",
+      "date": "2026-04-19",
+      "city": "杭州",
+      "province": "浙江",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "http://www.fymls.com/",
+      "_source": "nowrun",
+      "_sourceId": "146",
       "sources": [
         "nowrun"
       ]
@@ -19077,7 +19077,7 @@
       ],
       "terrain": "flat",
       "label": null,
-      "status": "upcoming",
+      "status": "closed",
       "registrationUrl": "https://www.nowrun.cn/race/470",
       "_source": "nowrun",
       "_sourceId": "470",
@@ -19096,7 +19096,7 @@
       ],
       "terrain": "flat",
       "label": null,
-      "status": "upcoming",
+      "status": "closed",
       "registrationUrl": "https://zuicool.com/event/10163",
       "_source": "zuicool-events",
       "_sourceId": "10163",
@@ -19347,6 +19347,25 @@
       ]
     },
     {
+      "id": "nr-460",
+      "name": "2026白银平川半程马拉松",
+      "date": "2026-07-19",
+      "city": "白银",
+      "province": "甘肃",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://www.nowrun.cn/race/460",
+      "_source": "nowrun",
+      "_sourceId": "460",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
       "id": "nr-410",
       "name": "2026多彩贵州马拉松超级联赛（第四站）暨六盘水马拉松",
       "date": "2026-07-19",
@@ -19362,25 +19381,6 @@
       "registrationUrl": "http://liupanshui.sites.irunner.mobi/",
       "_source": "nowrun",
       "_sourceId": "410",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
-      "id": "nr-460",
-      "name": "2026白银平川半程马拉松",
-      "date": "2026-07-19",
-      "city": "白银",
-      "province": "甘肃",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.nowrun.cn/race/460",
-      "_source": "nowrun",
-      "_sourceId": "460",
       "sources": [
         "nowrun"
       ]
@@ -19916,25 +19916,6 @@
       ]
     },
     {
-      "id": "nr-411",
-      "name": "2026多彩贵州半程马拉松超级联赛（第二站）暨威宁半程马拉松",
-      "date": "2026-08-23",
-      "city": "毕节",
-      "province": "贵州",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.nowrun.cn/race/411",
-      "_source": "nowrun",
-      "_sourceId": "411",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-61",
       "name": "2026沈阳·康平卧龙湖马拉松",
       "date": "2026-08-23",
@@ -19950,6 +19931,25 @@
       "registrationUrl": "http://www.kangpingmarathon.luojiweiye.com/",
       "_source": "nowrun",
       "_sourceId": "61",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-411",
+      "name": "2026多彩贵州半程马拉松超级联赛（第二站）暨威宁半程马拉松",
+      "date": "2026-08-23",
+      "city": "毕节",
+      "province": "贵州",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://www.nowrun.cn/race/411",
+      "_source": "nowrun",
+      "_sourceId": "411",
       "sources": [
         "nowrun"
       ]
@@ -22621,26 +22621,6 @@
       ]
     },
     {
-      "id": "nr-244",
-      "name": "2026济南（泉城）马拉松",
-      "date": "2026-10-25",
-      "city": "济南",
-      "province": "山东",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://jinanmarathon.iqilu.com/",
-      "_source": "nowrun",
-      "_sourceId": "244",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-243",
       "name": "2026威海马拉松",
       "date": "2026-10-25",
@@ -22656,6 +22636,26 @@
       "registrationUrl": "http://weihaimarathon.com/",
       "_source": "nowrun",
       "_sourceId": "243",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-244",
+      "name": "2026济南（泉城）马拉松",
+      "date": "2026-10-25",
+      "city": "济南",
+      "province": "山东",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://jinanmarathon.iqilu.com/",
+      "_source": "nowrun",
+      "_sourceId": "244",
       "sources": [
         "nowrun"
       ]
@@ -22778,25 +22778,6 @@
       ]
     },
     {
-      "id": "nr-487",
-      "name": "2026库尔勒半程马拉松",
-      "date": "2026-10-31",
-      "city": "库尔勒",
-      "province": "新疆",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.nowrun.cn/race/487",
-      "_source": "nowrun",
-      "_sourceId": "487",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-70",
       "name": "2026丹东鸭绿江马拉松",
       "date": "2026-10-31",
@@ -22812,6 +22793,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/70",
       "_source": "nowrun",
       "_sourceId": "70",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-487",
+      "name": "2026库尔勒半程马拉松",
+      "date": "2026-10-31",
+      "city": "库尔勒",
+      "province": "新疆",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://www.nowrun.cn/race/487",
+      "_source": "nowrun",
+      "_sourceId": "487",
       "sources": [
         "nowrun"
       ]
@@ -24262,25 +24262,6 @@
       "_sourceId": "138",
       "sources": [
         "nowrun"
-      ]
-    },
-    {
-      "id": "zc-16211",
-      "name": "2026港珠澳大桥（香港段）半程马拉松（名额套餐）",
-      "date": "2026-11-15",
-      "city": "中国香港",
-      "province": "香港",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://reg.zuicool.com/16211",
-      "_source": "zuicool",
-      "_sourceId": "16211",
-      "sources": [
-        "zuicool"
       ]
     },
     {
