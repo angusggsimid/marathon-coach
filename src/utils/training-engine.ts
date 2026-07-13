@@ -1,6 +1,35 @@
-import { addDays, differenceInDays } from 'date-fns';
+import { addDays, differenceInDays, startOfDay } from 'date-fns';
 
 export type CalculationMethod = 'coros';
+
+/**
+ * 解析本地日历日。
+ * - 纯 `YYYY-MM-DD`：按本地 00:00，避免 `new Date('YYYY-MM-DD')` 的 UTC 午夜偏移。
+ * - 含时间的 ISO（如 persist 后的 `...T16:00:00.000Z`）：先按瞬时解析再取本地日历日，
+ *   切勿只截前 10 字符（会把北京时间午夜误判成前一天）。
+ */
+export function parseLocalDate(isoDate: string): Date {
+  const s = (isoDate || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? new Date(NaN) : startOfDay(d);
+}
+
+/** 将 plan 中可能被 persist 成字符串的 date 规范回本地 Date */
+export function normalizeWorkoutDate(date: Date | string): Date {
+  if (date instanceof Date) {
+    return Number.isNaN(date.getTime()) ? date : startOfDay(date);
+  }
+  return parseLocalDate(String(date));
+}
+
+/** 本地日历日 00:00，用于 asOf / 计划起点 */
+export function localDay(d: Date = new Date()): Date {
+  return startOfDay(d);
+}
 
 export interface UserProfile {
   height: number | '';
@@ -110,8 +139,69 @@ export function calculateVDOTFrom5K10K(pb5k: string, pb10k: string): number {
   if (v5k > 0 && v10k > 0) return (v5k + v10k) / 2;
   if (v10k > 0) return v10k;
   if (v5k > 0) return v5k;
-  return 40; // fallback
+  return 0; // 空成绩不再 fallback 到 VDOT 40
 }
+
+/** 半马常规计划最短备赛天数（不含比赛日当天） */
+export const MIN_PLAN_DAYS_HALF = 21;
+/** 全马常规计划最短备赛天数（不含比赛日当天） */
+export const MIN_PLAN_DAYS_FULL = 35;
+
+export type PlanBlockReason =
+  | 'past_race'
+  | 'no_performance'
+  | 'too_short_half'
+  | 'too_short_full';
+
+/**
+ * 判断是否具备生成真实计划所需的成绩锚点。
+ * 至少一项有效 PB（5K/10K/半马/全马）或 LT 配速；空成绩不得用默认 4:33 生成计划。
+ */
+export function hasUsablePerformance(profile: UserProfile): boolean {
+  return (
+    timeToSeconds(profile.pbFull) > 0 ||
+    timeToSeconds(profile.pbHalf) > 0 ||
+    timeToSeconds(profile.pb5k) > 0 ||
+    timeToSeconds(profile.pb10k) > 0 ||
+    timeToSeconds(profile.ltPace) > 0
+  );
+}
+
+/**
+ * 计算 VDOT：Full > Half > 5K/10K。无有效成绩返回 0（不 fallback）。
+ */
+export function resolveVDOT(profile: UserProfile): number {
+  if (timeToSeconds(profile.pbFull) > 0) return calculateVDOTFromFull(profile.pbFull);
+  if (timeToSeconds(profile.pbHalf) > 0) return calculateVDOTFromHalf(profile.pbHalf);
+  return calculateVDOTFrom5K10K(profile.pb5k, profile.pb10k);
+}
+
+/** 计划生成前置检查；返回 null 表示可通过。 */
+export function getPlanBlockReason(
+  profile: UserProfile,
+  asOf: Date = new Date(),
+): PlanBlockReason | null {
+  const raceDate = parseLocalDate(profile.raceDate);
+  if (Number.isNaN(raceDate.getTime())) return 'past_race';
+  const totalDays = differenceInDays(raceDate, localDay(asOf));
+  if (totalDays <= 0) return 'past_race';
+  if (!hasUsablePerformance(profile)) return 'no_performance';
+  const minDays = profile.raceType === 'full' ? MIN_PLAN_DAYS_FULL : MIN_PLAN_DAYS_HALF;
+  if (totalDays < minDays) {
+    return profile.raceType === 'full' ? 'too_short_full' : 'too_short_half';
+  }
+  return null;
+}
+
+export const PLAN_BLOCK_MESSAGES: Record<PlanBlockReason, string> = {
+  past_race: '比赛日期已过，无法生成备赛计划。请选择未来的比赛日期。',
+  no_performance:
+    '请至少填写一项有效成绩（5km / 10km / 半马 / 全马）或 LT 配速。系统不会用默认能力值替你生成计划。',
+  too_short_half:
+    `距半马比赛不足 ${MIN_PLAN_DAYS_HALF} 天，不适合生成常规备赛计划。小白建议：改为轻松有氧维持、保证睡眠，赛前 2 周以减量为主，不要临时加量冲刺。`,
+  too_short_full:
+    `距全马比赛不足 ${MIN_PLAN_DAYS_FULL} 天，不适合生成常规备赛计划。小白建议：改为轻松有氧维持、保证睡眠，赛前 3 周以减量为主，不要临时加量冲刺。`,
+};
 
 // Base peak weekly mileage from VDOT (Jack Daniels + RRCA reference)
 export function getBaseCapacityFromVDOT(vdot: number, raceType: 'half' | 'full'): number {
@@ -147,21 +237,45 @@ export function predictTime(vdot: number, type: 'half' | 'full'): string {
 // Anchor: LT Pace (lactate threshold pace, per km)
 // Z4 widened to ±12s around LT to match official COROS EvoLab spec
 // ============================================================
-export function calculatePaces(profile: UserProfile) {
-  let tPaceSec = timeToSeconds(profile.ltPace);
-  if (!tPaceSec) {
-    const halfSec = timeToSeconds(profile.pbHalf);
-    if (halfSec) tPaceSec = (halfSec / 21.1) * 0.93;
-    else {
-      const tenKSec = timeToSeconds(profile.pb10k);
-      if (tenKSec) tPaceSec = (tenKSec / 10) * 1.05;
-      else {
-        const fiveKSec = timeToSeconds(profile.pb5k);
-        if (fiveKSec) tPaceSec = (fiveKSec / 5) * 1.1;
-        else tPaceSec = 273; // 4:33 default
-      }
-    }
-  }
+/**
+ * 从档案推导 LT 配速（秒/km）。
+ * 优先级：用户 LT → 半马 → 全马 → 10K → 5K。
+ * 无任何锚点返回 0（禁止静默 4:33）。
+ *
+ * 换算说明（与 COROS/常见阈值近似一致，非实验室精确值）：
+ * - 半马配速 × 0.93 ≈ LT
+ * - 全马配速 × 0.94 ≈ LT（全马略慢于半马，系数略放宽）
+ * - 10K 配速 × 1.05 ≈ LT
+ * - 5K 配速 × 1.10 ≈ LT
+ */
+export function resolveLTPaceSec(profile: UserProfile): number {
+  const fromLt = timeToSeconds(profile.ltPace);
+  if (fromLt > 0) return fromLt;
+
+  const halfSec = timeToSeconds(profile.pbHalf);
+  if (halfSec > 0) return (halfSec / 21.1) * 0.93;
+
+  const fullSec = timeToSeconds(profile.pbFull);
+  if (fullSec > 0) return (fullSec / 42.195) * 0.94;
+
+  const tenKSec = timeToSeconds(profile.pb10k);
+  if (tenKSec > 0) return (tenKSec / 10) * 1.05;
+
+  const fiveKSec = timeToSeconds(profile.pb5k);
+  if (fiveKSec > 0) return (fiveKSec / 5) * 1.1;
+
+  return 0;
+}
+
+/**
+ * COROS EvoLab 区间配速。无成绩时返回 null，调用方不得用 4:33 假装有能力数据。
+ * 指标页预览可对 null 做空态展示；计划生成必须在 hasUsablePerformance 之后调用。
+ */
+export function calculatePaces(profile: UserProfile): {
+  z1: string; z2: string; z3: string; z4: string; z5: string; z6: string; isCustom: boolean;
+} | null {
+  const tPaceSec = resolveLTPaceSec(profile);
+  if (tPaceSec <= 0) return null;
 
   return {
     z1: `> ${formatPace(tPaceSec + 97)}`,
@@ -187,16 +301,20 @@ export function calculateHRZones(profile: UserProfile) {
   };
 }
 
-export function generateTrainingPlan(profile: UserProfile): DailyWorkout[] {
+export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date()): DailyWorkout[] {
   const plan: DailyWorkout[] = [];
-  const today = new Date();
-  const raceDate = new Date(profile.raceDate);
+  const today = localDay(asOf);
+  const raceDate = parseLocalDate(profile.raceDate);
+
+  // 引擎硬守卫：短周期 / 无成绩 一律不生成常规计划（不依赖 UI）
+  if (getPlanBlockReason(profile, today) !== null) return [];
 
   const totalDays = differenceInDays(raceDate, today);
   if (totalDays <= 0) return [];
 
   const totalWeeks = Math.max(1, Math.ceil(totalDays / 7));
   const paces = calculatePaces(profile);
+  if (!paces) return []; // 空成绩不得用 4:33 生成真实计划
   const hrZones = calculateHRZones(profile);
   const lsdDay = profile.longRunDay ?? 0; // preferred long run day of week
 
@@ -215,13 +333,13 @@ export function generateTrainingPlan(profile: UserProfile): DailyWorkout[] {
     description: '1. 推墙小腿拉伸(1分); 2. 站姿大腿前侧拉伸(1分); 3. 双脚交叉体前屈拉大腿后侧(1分); 4. 站姿四字臀部拉伸(1分); 5. 侧腰伸展与深呼吸平复心率(1分)。'
   });
 
-  // 1. VDOT — priority: Full > Half > 5K/10K (longer race = more reliable predictor)
-  let vdot = calculateVDOTFrom5K10K(profile.pb5k, profile.pb10k);
-  if (profile.pbFull) vdot = calculateVDOTFromFull(profile.pbFull);
-  else if (profile.pbHalf) vdot = calculateVDOTFromHalf(profile.pbHalf);
+  // 1. VDOT — priority: Full > Half > 5K/10K（无成绩已在守卫拦截，此处不再 fallback 40）
+  const vdot = resolveVDOT(profile);
+  if (vdot <= 0 && timeToSeconds(profile.ltPace) <= 0) return [];
 
-  // 2. Base capacity from VDOT
-  const baseCapacity = getBaseCapacityFromVDOT(vdot, profile.raceType);
+  // 2. Base capacity from VDOT（仅 LT 无 PB 时用温和默认 45 作为容量锚，仍要求 hasUsablePerformance）
+  const capacityVdot = vdot > 0 ? vdot : 45;
+  const baseCapacity = getBaseCapacityFromVDOT(capacityVdot, profile.raceType);
 
   // 3. Intensity multiplier
   const intensityMultiplier = profile.intensity === 'light' ? 0.80 : profile.intensity === 'moderate' ? 1.00 : 1.25;
@@ -345,6 +463,11 @@ export function generateTrainingPlan(profile: UserProfile): DailyWorkout[] {
     '峰值/减量期': '减量期重点：保持强度、削减跑量。不要在减量期增加新内容，信任你的训练积累。',
   };
 
+  // LT 秒：与 calculatePaces 同一推导（含仅全马 PB）；禁止静默 4:33
+  const ltSec = resolveLTPaceSec(profile);
+  if (ltSec <= 0) return [];
+  const easyPaceSec = ltSec + 80;
+
   for (let w = 0; w < totalWeeks; w++) {
     const isTaperWeek = w >= preTaperWeeks;
     const isRecovery = (w > 0 && w % cycleLength === (cycleLength - 1) && !isTaperWeek);
@@ -358,9 +481,6 @@ export function generateTrainingPlan(profile: UserProfile): DailyWorkout[] {
     }
     const totalBuildWeeks = preTaperWeeks - Math.floor((preTaperWeeks - 1) / cycleLength);
     const progress = Math.min(1, buildIdx / Math.max(1, totalBuildWeeks));
-
-    const ltSec = timeToSeconds(profile.ltPace) || 273;
-    const easyPaceSec = ltSec + 80;
 
     // --- Progressive minimum distances (ramp with progress) ---
     const minEasyKm = Math.max(5, Math.ceil((35 * 60) / easyPaceSec));

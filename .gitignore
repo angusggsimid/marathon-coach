@@ -33,3 +33,16 @@ tsconfig.*.tsbuildinfo
 
 # Claude Code settings
 .claude/
+
+# Crawler runtime output (raw/scraped JSON, audit logs)
+crawler/output/
+crawler/output/**
+
+# Acceptance artifacts: keep scripts/reports, ignore bulky/temp
+acceptance-*/screenshots/
+acceptance-*/**/*.log
+acceptance-*/scrape-full.log
+**/scrape-full.log
+
+# Local temp / service noise
+*.tsbuildinfo

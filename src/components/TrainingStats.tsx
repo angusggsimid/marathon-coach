@@ -17,7 +17,7 @@ export function TrainingStats() {
       {/* Page title */}
       <div className="pt-1 pb-1">
         <h1 className="text-[22px] font-bold text-white tracking-tight">训练配速与心率</h1>
-        <p className="text-[13px] text-[var(--color-label-2)] mt-0.5">基于 COROS EvoLab 6 区间系统</p>
+        <p className="text-[13px] text-[var(--color-label-2)] mt-0.5">基于 COROS EvoLab 6 区间模型（设备同步请走 Intervals.icu）</p>
       </div>
 
       {/* Best-practice tip */}
@@ -47,20 +47,28 @@ export function TrainingStats() {
               配速区间 · COROS EvoLab
             </p>
           </div>
-          <SourceBadge estimated={paceEstimated} />
+          {paces && <SourceBadge estimated={paceEstimated} />}
         </div>
-        {paceEstimated && (
+        {paces && paceEstimated && (
           <p className="text-[11px] text-[var(--color-label-3)] px-1 mb-2 leading-relaxed">
             根据你的历史成绩推算，随着训练积累会越来越贴合你的实际状态。
           </p>
         )}
         <div className="bg-[var(--color-surface)] rounded-2xl overflow-hidden">
-          <PaceRow label="Zone 1 (恢复)"    value={paces.z1} sub="排酸、热身、冷身" />
-          <PaceRow label="Zone 2 (有氧耐力)" value={paces.z2} sub="LSD、Easy跑 — 占80%总量" />
-          <PaceRow label="Zone 3 (有氧动力)" value={paces.z3} sub="马拉松配速 (MP) 专项" />
-          <PaceRow label="Zone 4 (乳酸阈值)" value={paces.z4} sub="Tempo、Cruise Intervals" isAnchor />
-          <PaceRow label="Zone 5 (速度耐力)" value={paces.z5} sub="VO2max 间歇、Fartlek" />
-          <PaceRow label="Zone 6 (冲刺能力)" value={paces.z6} sub="短冲刺跑" isLast />
+          {paces ? (
+            <>
+              <PaceRow label="Zone 1 (恢复)"    value={paces.z1} sub="排酸、热身、冷身" />
+              <PaceRow label="Zone 2 (有氧耐力)" value={paces.z2} sub="LSD、Easy跑 — 占80%总量" />
+              <PaceRow label="Zone 3 (有氧动力)" value={paces.z3} sub="马拉松配速 (MP) 专项" />
+              <PaceRow label="Zone 4 (乳酸阈值)" value={paces.z4} sub="Tempo、Cruise Intervals" isAnchor />
+              <PaceRow label="Zone 5 (速度耐力)" value={paces.z5} sub="VO2max 间歇、Fartlek" />
+              <PaceRow label="Zone 6 (冲刺能力)" value={paces.z6} sub="短冲刺跑" isLast />
+            </>
+          ) : (
+            <p className="px-4 py-6 text-[13px] text-[var(--color-label-2)] leading-relaxed">
+              尚未填写成绩或 LT 配速，无法推算区间。请到「档案」至少填写一项成绩——系统不会用默认配速假装你有数据。
+            </p>
+          )}
         </div>
       </div>
 

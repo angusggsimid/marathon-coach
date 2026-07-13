@@ -15,6 +15,7 @@
  */
 
 import type { DailyWorkout } from './training-engine';
+import { normalizeWorkoutDate } from './training-engine';
 import { format } from 'date-fns';
 
 // Proxy URL injected at build time. Falls back to direct if not set.
@@ -84,8 +85,10 @@ export async function syncPlanToICU(
     const w = workouts[i];
     onProgress?.({ current: i + 1, total: workouts.length });
 
+    // 与训练引擎一致：本地日历日，避免 ISO 字符串经 new Date 后日界线偏移
+    const dayKey = format(normalizeWorkoutDate(w.date as Date | string), 'yyyy-MM-dd');
     const body: Record<string, unknown> = {
-      start_date_local: `${format(new Date(w.date), 'yyyy-MM-dd')}T00:00:00`,
+      start_date_local: `${dayKey}T00:00:00`,
       category:         'WORKOUT',
       type:             'Run',
       name:             buildEventName(w),

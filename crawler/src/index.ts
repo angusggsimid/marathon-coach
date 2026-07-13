@@ -23,6 +23,11 @@ import { scrapeMarathonbm } from './scrapers/marathonbm.js';
 import { SOURCE_POLICIES, getSourcePolicy } from './sourcePolicies.js';
 import { evaluateRaceQuality } from './utils.js';
 import type { RaceQualityIssue } from './utils.js';
+import {
+  dedupRaces,
+  generateDuplicateReportMarkdown,
+  publishNormalize,
+} from './race-normalize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = join(__dirname, '..', 'output');
@@ -74,11 +79,15 @@ async function main() {
     results.push(r);
   }
 
-  // ── Merge + deduplicate + quality gate ────────────────────────────────────
+  // ── Quality gate → date/status normalize → dedup / near-merge ─────────────
   const rawRaces = results.flatMap(r => r.races);
-  const uniqueBeforeQuality = dedup(rawRaces).length;
+  const uniqueBeforeQuality = dedupRaces(rawRaces).races.length;
   const quality = applyQualityGate(rawRaces);
-  const allRaces = dedup(quality.kept);
+  const {
+    races: allRaces,
+    duplicateReport,
+    dateRejected,
+  } = publishNormalize(quality.kept);
   const totalErrors = results.flatMap(r => r.errors);
   const audit = buildCrawlerAudit(results, quality, allRaces, totalErrors);
 
@@ -96,6 +105,13 @@ async function main() {
     for (const [issue, count] of Object.entries(quality.byIssue)) {
       console.log(`    - ${issue}: ${count}`);
     }
+  }
+  if (dateRejected.length > 0) {
+    console.log(`  ${'DATE'.padEnd(10)} ${dateRejected.length} date-quality rejects`);
+  }
+  if (duplicateReport.length > 0) {
+    const near = duplicateReport.filter(e => e.type === 'near-merge').length;
+    console.log(`  ${'DEDUP'.padEnd(10)} ${duplicateReport.length} merges (${near} near-merge)`);
   }
   if (totalErrors.length) {
     console.log(`\nErrors:`);
@@ -133,6 +149,12 @@ async function main() {
   const auditReportPath = join(OUTPUT_DIR, 'crawler-audit.md');
   writeFileSync(auditReportPath, generateCrawlerAuditReport(audit), 'utf8');
   console.log(`       crawler audit → ${auditReportPath}`);
+
+  if (duplicateReport.length > 0) {
+    const dupPath = join(OUTPUT_DIR, 'duplicate-report.md');
+    writeFileSync(dupPath, generateDuplicateReportMarkdown(duplicateReport), 'utf8');
+    console.log(`       duplicate report → ${dupPath}`);
+  }
 
   // Also write per-source files
   for (const r of results) {
@@ -353,107 +375,6 @@ function generateCrawlerAuditReport(audit: CrawlerAudit): string {
 
 function escapeMd(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
-}
-
-// ─── Deduplication ────────────────────────────────────────────────────────────
-
-function dedup(races: RaceEvent[]): RaceEvent[] {
-  const seen = new Map<string, RaceEvent>();
-
-  for (const race of races) {
-    // Dedup key: normalised name + date month
-    const key = dedupKey(race);
-    const existing = seen.get(key);
-
-    if (!existing) {
-      seen.set(key, withSources(race));
-      continue;
-    }
-
-    // Merge: prefer 'open' status, keep more complete distances, retain source confirmations.
-    const merged: RaceEvent = {
-      ...existing,
-      status: mergePriority(existing.status, race.status),
-      distances: mergeDistances(existing.distances, race.distances),
-      registrationUrl: existing.registrationUrl ?? race.registrationUrl,
-      sources: mergeSources(existing, race),
-    };
-    seen.set(key, merged);
-  }
-
-  return Array.from(seen.values()).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function dedupKey(r: RaceEvent): string {
-  // Normalise name for fuzzy matching:
-  //   1. strip leading year "2026 "
-  //   2. strip trailing sponsor/notes in brackets
-  //   3. collapse whitespace
-  //   4. normalise punctuation variants so e.g.
-  //        "太湖—号公路" vs "太湖1号公路"  →  same key
-  //        "第一届" vs "第1届"             →  same key
-  const month = r.date.slice(0, 7);
-  const canonicalName = canonicalRaceName(r.name);
-  return `${canonicalName}|${month}`;
-}
-
-function canonicalRaceName(raw: string): string {
-  if (/黄果树.*半程马拉松|镇宁黄果树/.test(raw)) {
-    return '贵州镇宁黄果树半程马拉松';
-  }
-
-  return raw
-    .replace(/^\d{4}\s*/, '')
-    .replace(/（[^）]{1,20}）$/, '')
-    .replace(/\([^)]{1,20}\)$/, '')
-    .replace(/\s/g, '')
-    // full-width dash / em-dash / en-dash used as 'number one' → '1'
-    .replace(/[—－–—–]/g, '1')
-    // full-width digits → ASCII
-    .replace(/[０-９]/g, c => String(c.charCodeAt(0) - 0xFF10))
-    // Chinese number characters (一二三…) left as-is — too risky to normalise broadly
-    .toLowerCase();
-}
-
-function withSources(race: RaceEvent): RaceEvent {
-  return {
-    ...race,
-    sources: mergeSources(race),
-  };
-}
-
-function mergeSources(...races: RaceEvent[]): string[] {
-  const sources = new Set<string>();
-
-  for (const race of races) {
-    for (const source of race.sources ?? []) {
-      sources.add(normalizeSource(source));
-    }
-    if (race._source) {
-      sources.add(normalizeSource(race._source));
-    }
-  }
-
-  return Array.from(sources).sort();
-}
-
-function normalizeSource(source: string): string {
-  return source === 'zuicool-events' ? 'zuicool' : source;
-}
-
-const STATUS_PRIORITY: Record<string, number> = {
-  open: 4, closed: 3, upcoming: 2, postponed: 1, cancelled: 0,
-};
-
-function mergePriority(
-  a: RaceEvent['status'],
-  b: RaceEvent['status'],
-): RaceEvent['status'] {
-  return (STATUS_PRIORITY[a] ?? 0) >= (STATUS_PRIORITY[b] ?? 0) ? a : b;
-}
-
-function mergeDistances(a: RaceEvent['distances'], b: RaceEvent['distances']): RaceEvent['distances'] {
-  return [...new Set([...a, ...b])];
 }
 
 main().catch(err => {

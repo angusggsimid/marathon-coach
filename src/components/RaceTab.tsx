@@ -30,7 +30,14 @@ export interface UnifiedRace {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);
+/** 本地日历日，避免 UTC toISOString 在中国凌晨把「今天」算成昨天 */
+function localTodayKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+const TODAY = localTodayKey();
 
 const FOREIGN_PROVINCES = new Set([
   '日本','韩国','美国','法国','泰国','马来西亚','英国','澳大利亚',
@@ -314,7 +321,8 @@ export function RaceTab() {
     const q = query.toLowerCase().trim();
     return races.filter(r => {
       if (distFilter !== 'all' && !r.distances.includes(distFilter)) return false;
-      if (openOnly && r.status !== 'open') return false;
+      // openOnly 与列表分组一致：用 classify，避免过期 open 仍出现在「报名中」筛选
+      if (openOnly && classify(r) !== 'open') return false;
       if (province === '__foreign__' && !FOREIGN_PROVINCES.has(r.province)) return false;
       else if (province !== 'all' && province !== '__foreign__' && r.province !== province) return false;
       if (monthFilter !== 'all' && !r.date.startsWith(monthFilter)) return false;

@@ -4,6 +4,9 @@ import { ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import {
   calculateVDOTFromFull, calculateVDOTFromHalf,
   calculateVDOTFrom5K10K, predictTime,
+  getPlanBlockReason, PLAN_BLOCK_MESSAGES,
+  MIN_PLAN_DAYS_HALF, MIN_PLAN_DAYS_FULL,
+  hasUsablePerformance,
 } from '../utils/training-engine';
 import { cn } from '../utils/cn';
 
@@ -81,9 +84,6 @@ export function ProfileForm() {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
-    if (!profile.pb5k && !profile.pb10k && !profile.pbHalf && !profile.pbFull)
-      newErrors.pb5k = '至少填写一项成绩（5km 或以上）';
-
     if (profile.pb5k   && !validateMMSS(profile.pb5k))   newErrors.pb5k   = '格式：mm:ss';
     if (profile.pb10k  && !validateMMSS(profile.pb10k))  newErrors.pb10k  = '格式：mm:ss';
     if (profile.ltPace && !validateMMSS(profile.ltPace)) newErrors.ltPace = '格式：mm:ss';
@@ -91,11 +91,32 @@ export function ProfileForm() {
     if (profile.pbFull && !validateHHMMSS(profile.pbFull)) newErrors.pbFull = '格式：hh:mm:ss';
     if (profile.goalTime && !validateHHMMSS(profile.goalTime)) newErrors.goalTime = '格式：hh:mm:ss';
 
-    const diffDays = Math.ceil(
-      (new Date(profile.raceDate).getTime() - new Date().getTime()) / 86400000
-    );
-    if (diffDays <= 0) newErrors.raceDate = '比赛日期必须在未来';
-    if (diffDays > 730) newErrors.raceDate = '备赛周期过长（最多2年）';
+    // 与引擎一致：PB 或 LT 至少一项有效；禁止空成绩用默认能力值
+    if (!hasUsablePerformance(profile)) {
+      newErrors.pb5k = PLAN_BLOCK_MESSAGES.no_performance;
+    }
+
+    // 短周期 / 过期硬守卫：与 generateTrainingPlan 同一套规则
+    const block = getPlanBlockReason(profile);
+    if (block === 'past_race') {
+      newErrors.raceDate = PLAN_BLOCK_MESSAGES.past_race;
+    } else if (block === 'too_short_half') {
+      newErrors.raceDate = `距半马不足 ${MIN_PLAN_DAYS_HALF} 天，无法生成常规计划`;
+    } else if (block === 'too_short_full') {
+      newErrors.raceDate = `距全马不足 ${MIN_PLAN_DAYS_FULL} 天，无法生成常规计划`;
+    } else if (block === 'no_performance') {
+      newErrors.pb5k = PLAN_BLOCK_MESSAGES.no_performance;
+    } else {
+      // 过长周期：引擎允许但产品上限 2 年
+      const raceMs = (() => {
+        const m = profile.raceDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return NaN;
+        return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+      })();
+      const todayMs = new Date().setHours(0, 0, 0, 0);
+      const diffDays = Number.isNaN(raceMs) ? 0 : Math.round((raceMs - todayMs) / 86400000);
+      if (diffDays > 730) newErrors.raceDate = '备赛周期过长（最多2年）';
+    }
 
     // Cross-check: 10K shouldn't be faster per km than 5K
     if (profile.pb5k && profile.pb10k && validateMMSS(profile.pb5k) && validateMMSS(profile.pb10k)) {
@@ -117,6 +138,8 @@ export function ProfileForm() {
     setHasChanges(false);
     generatePlan();
   };
+
+  const planBlockPreview = useMemo(() => getPlanBlockReason(profile), [profile]);
 
   // Smart prediction
   const predictions = useMemo(() => {
@@ -261,6 +284,14 @@ export function ProfileForm() {
             )}
           />
           {errors.raceDate && <FieldError>{errors.raceDate}</FieldError>}
+          {(planBlockPreview === 'too_short_half' || planBlockPreview === 'too_short_full') && (
+            <div className="mt-3 rounded-xl border border-[var(--color-orange)]/30 bg-[var(--color-orange)]/10 px-3 py-3">
+              <p className="text-[12px] font-semibold text-[var(--color-orange)] mb-1">周期太短，不生成常规计划</p>
+              <p className="text-[12px] text-[var(--color-label-2)] leading-relaxed">
+                {PLAN_BLOCK_MESSAGES[planBlockPreview]}
+              </p>
+            </div>
+          )}
         </div>
       </Card>
 

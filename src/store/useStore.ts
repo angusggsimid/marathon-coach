@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserProfile, DailyWorkout } from '../utils/training-engine';
 import { generateTrainingPlan } from '../utils/training-engine';
-import { addDays, format, startOfWeek, endOfWeek } from 'date-fns';
+import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
+import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
+import { addDays, format } from 'date-fns';
 
 type TabType = 'profile' | 'stats' | 'calendar' | 'races';
 
@@ -83,6 +85,7 @@ interface AppState {
   logCompletion: (dateStr: string, status: CompletionStatus, rpe: RPELevel) => void;
   getWeeklyAdaptation: (weekEndSunday: Date) => WeeklyAdaptation;
   saveICUCredentials: (apiKey: string, athleteId: string) => void;
+  clearICUCredentials: () => void;
   addMyRace: (raceId: string, distance: MyRaceDistance, goal: MyRaceGoal, meta?: Omit<MyRace, 'raceId'|'distance'|'goal'|'addedAt'>) => void;
   removeMyRace: (raceId: string) => void;
   updateMyRaceGoal: (raceId: string, goal: MyRaceGoal) => void;
@@ -148,12 +151,18 @@ export const useStore = create<AppState>()(
       generatePlan: () => {
         const { profile } = get();
         const plan = generateTrainingPlan(profile);
+        // 引擎硬守卫失败时返回 []：不要把空计划标记为已生成，避免旧用户误入空日历
+        if (plan.length === 0) {
+          set({ plan: [], isPlanGenerated: false, planNeedsRegen: false });
+          return;
+        }
         set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'calendar' });
       },
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
       saveICUCredentials: (apiKey, athleteId) => set({ icuApiKey: apiKey, icuAthleteId: athleteId }),
+      clearICUCredentials: () => set({ icuApiKey: '', icuAthleteId: get().icuAthleteId }),
 
       addMyRace: (raceId, distance, goal, meta = {}) => {
         const entry: MyRace = { raceId, distance, goal, addedAt: new Date().toISOString(), ...meta };
@@ -209,55 +218,57 @@ export const useStore = create<AppState>()(
 
       getWeeklyAdaptation: (weekEndSunday) => {
         const { plan, completions } = get();
-        // Look at Mon–Sat of the week ending on this Sunday
-        const weekStart = startOfWeek(weekEndSunday, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(weekEndSunday, { weekStartsOn: 1 });
-
-        // All scheduled non-Rest workouts in this window
-        const scheduledWorkouts = plan.filter(w => {
-          const d = new Date(w.date);
-          return d >= weekStart && d <= weekEnd && w.workoutType !== 'Rest';
-        });
-
-        const totalWorkouts = scheduledWorkouts.length;
-        if (totalWorkouts === 0) {
-          return { completionRate: 1, avgRpe: 2, checkedCount: 0, totalWorkouts: 0, advice: '本周无训练记录', factor: 1.0 };
-        }
-
-        const checkedIn = scheduledWorkouts
-          .map(w => completions[format(new Date(w.date), 'yyyy-MM-dd')])
-          .filter(Boolean) as CompletionEntry[];
-
-        const checkedCount = checkedIn.length;
-        if (checkedCount === 0) {
-          return { completionRate: 0, avgRpe: 2, checkedCount: 0, totalWorkouts, advice: '本周尚未打卡', factor: 1.0 };
-        }
-
-        const skipped = checkedIn.filter(c => c.status === 'skip').length;
-        const completed = checkedIn.length - skipped;
-        // Completion rate: completed sessions out of all scheduled workouts this week
-        const completionRate = completed / totalWorkouts;
-        const avgRpe = checkedIn.reduce((sum, c) => sum + c.rpe, 0) / checkedIn.length;
-
-        let advice = '';
-        let factor = 1.0;
-
-        if (completionRate < 0.70 || avgRpe >= 3.0) {
-          advice = `完成率 ${Math.round(completionRate * 100)}% · 体感偏累 → 建议下周减量 10%`;
-          factor = 0.90;
-        } else if (completionRate >= 0.90 && avgRpe <= 1.5) {
-          advice = `完成率 ${Math.round(completionRate * 100)}% · 状态极佳 → 可尝试增加 5%`;
-          factor = 1.05;
-        } else {
-          advice = `完成率 ${Math.round(completionRate * 100)}% · 体感正常 → 保持当前强度`;
-          factor = 1.0;
-        }
-
-        return { completionRate, avgRpe, checkedCount, totalWorkouts, advice, factor };
+        // plan 可能经 persist 把 Date 变成 ISO 字符串；compute 内部用 toDateKey 兼容。
+        // 说明：此处用原始 plan（不含 race/vacation overlay），与日志周摘要一致；
+        // 实际距离缩放见 useEffectivePlan → applyWeeklyAdaptation(basePlan)。
+        return computeWeeklyAdaptation(
+          plan as Parameters<typeof computeWeeklyAdaptation>[0],
+          completions as Record<string, AdaptCompletion>,
+          weekEndSunday,
+        );
       },
     }),
     {
       name: 'marathon-training-storage',
+      // 安全：API Key 不得写入 localStorage；仅会话内存保留
+      partialize: (state) => {
+        const {
+          icuApiKey: _omitKey,
+          // 其余全部持久化
+          profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
+          completions, icuAthleteId, myRaces, vacations,
+        } = state;
+        void _omitKey;
+        return {
+          profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
+          completions, icuAthleteId, myRaces, vacations,
+        };
+      },
+      // 旧版本可能已把 icuApiKey 写入 storage，迁移时剔除
+      migrate: (persisted: unknown) => {
+        if (persisted && typeof persisted === 'object') {
+          const p = persisted as Record<string, unknown>;
+          if ('icuApiKey' in p) {
+            delete p.icuApiKey;
+          }
+          // zustand persist v4 可能是 { state, version }
+          if (p.state && typeof p.state === 'object') {
+            const s = p.state as Record<string, unknown>;
+            if ('icuApiKey' in s) delete s.icuApiKey;
+          }
+        }
+        return persisted as never;
+      },
+      version: 2,
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AppState>;
+        // 强制：即使旧数据漏网，也不恢复 key
+        return {
+          ...current,
+          ...p,
+          icuApiKey: '',
+        };
+      },
     }
   )
 );

@@ -12,7 +12,8 @@
     "scrape:dry":      "tsx src/index.ts --dry-run",
     "merge":           "tsx src/merge.ts",
     "serve":           "tsx src/server.ts",
-    "test":            "tsx src/index.ts --dry-run --limit 5"
+    "test":            "tsx src/index.ts --dry-run --limit 5",
+    "test:normalize":  "tsx src/race-normalize.selftest.ts"
   },
   "dependencies": {
     "cheerio": "^1.0.0"

@@ -2,28 +2,43 @@ import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { Vacation } from '../store/useStore';
 import { applyRaceOverlays } from '../utils/race-plan-overlay';
+import { applyWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { DailyWorkout } from '../utils/training-engine';
+import { normalizeWorkoutDate } from '../utils/training-engine';
 import { format } from 'date-fns';
 
 /**
- * Returns the training plan with taper/recovery overlays applied for all myRaces,
- * and vacation blocks applied on top.
+ * Race taper/recovery + vacation overlays（不含周自适应）。
+ * 自适应系数计算与 UI meta 应基于此计划，避免与最终缩放用不同底表。
  *
  * NOTE: Zustand persist serializes Date objects as ISO strings.
- * We normalize them back to Date instances here so downstream code
- * (race-plan-overlay, CalendarView) can call .getTime(), isSameDay(), etc.
+ * We normalize them back to local Date instances here.
  */
-export function useEffectivePlan() {
+export function useBasePlan() {
   const { plan, myRaces, profile, vacations } = useStore();
   return useMemo(() => {
-    // Normalize dates in case Zustand rehydrated them as strings
     const normalizedPlan = plan.map(w => ({
       ...w,
-      date: w.date instanceof Date ? w.date : new Date(w.date as unknown as string),
+      date: normalizeWorkoutDate(w.date as Date | string),
     }));
     const withRaces = applyRaceOverlays(normalizedPlan, myRaces, profile.raceType);
     return applyVacationOverlay(withRaces, vacations);
   }, [plan, myRaces, profile.raceType, vacations]);
+}
+
+/**
+ * Returns the training plan with:
+ * 1) race taper/recovery overlays
+ * 2) vacation overlays
+ * 3) weekly adaptation on next future week distances only
+ */
+export function useEffectivePlan() {
+  const basePlan = useBasePlan();
+  const completions = useStore(s => s.completions);
+  return useMemo(
+    () => applyWeeklyAdaptation(basePlan, completions),
+    [basePlan, completions],
+  );
 }
 
 // ─── Vacation overlay ─────────────────────────────────────────────────────────

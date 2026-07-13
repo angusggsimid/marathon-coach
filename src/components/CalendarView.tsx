@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { TrainingLog } from './TrainingLog';
 import { useStore, RPE_LABELS, RPE_COLORS } from '../store/useStore';
-import { useEffectivePlan } from '../hooks/useEffectivePlan';
+import { useBasePlan, useEffectivePlan } from '../hooks/useEffectivePlan';
 import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import type { CheckInMessage } from '../utils/checkin-messages';
@@ -14,6 +14,7 @@ import { format, startOfWeek, addDays, addMonths, isSameMonth, isSameDay, startO
 import { zhCN } from 'date-fns/locale';
 import { useState } from 'react';
 import type { DailyWorkout, WorkoutSegment } from '../utils/training-engine';
+import { getActiveAdaptationMeta } from '../utils/weekly-adaptation';
 import { cn } from '../utils/cn';
 
 // ─── Check-in Modal ───────────────────────────────────────────────────────────
@@ -121,7 +122,8 @@ function CheckInModal({ workout, existing, onSave, onClose }: CheckInModalProps)
 type ICUView = 'menu' | 'setup' | 'syncing' | 'done';
 
 export function CalendarView() {
-  const { profile, completions, logCompletion, getWeeklyAdaptation, icuApiKey, icuAthleteId, saveICUCredentials, vacations, addVacation, removeVacation, myRaces } = useStore();
+  const { profile, completions, logCompletion, getWeeklyAdaptation, icuApiKey, icuAthleteId, saveICUCredentials, clearICUCredentials, vacations, addVacation, removeVacation, myRaces } = useStore();
+  const basePlan = useBasePlan();
   const plan = useEffectivePlan();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedWorkout, setSelectedWorkout] = useState<DailyWorkout | null>(null);
@@ -215,7 +217,11 @@ export function CalendarView() {
     );
   }
 
-  const weeksToRace = differenceInWeeks(new Date(profile.raceDate), new Date());
+  const raceDateParts = profile.raceDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const raceDateLocal = raceDateParts
+    ? new Date(+raceDateParts[1], +raceDateParts[2] - 1, +raceDateParts[3])
+    : new Date(profile.raceDate);
+  const weeksToRace = differenceInWeeks(raceDateLocal, new Date());
 
   // Today's workout
   const todayWorkout = plan.find(w => isSameDay(new Date(w.date), new Date()));
@@ -232,6 +238,8 @@ export function CalendarView() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const currentWeekVolume = Math.round(currentWeekWorkouts.reduce((sum, w) => sum + (w.distanceKm || 0), 0) * 10) / 10;
   const currentWeekWorkoutCount = currentWeekWorkouts.filter(w => w.workoutType !== 'Rest').length;
+  // 自适应元数据：与 applyWeeklyAdaptation 同一底表（race+vacation 后、缩放前）
+  const adaptationMeta = getActiveAdaptationMeta(basePlan, completions);
   const targetRace = myRaces.find(r => r.date === profile.raceDate && !r.dateTBD);
   const targetRaceName = targetRace?.name ?? (profile.raceType === 'full' ? '全马目标赛' : '半马目标赛');
   const shareText = [
@@ -382,13 +390,15 @@ export function CalendarView() {
           <div className="px-3 py-2 border-b border-[var(--color-separator)] space-y-1">
             {showAdaptation && (
               <div className={cn(
-                'flex items-center gap-1.5 text-[10px] font-medium rounded-lg px-2 py-1.5',
+                'flex items-start gap-1.5 text-[10px] font-medium rounded-lg px-2 py-1.5 leading-relaxed break-words',
                 adaptation.factor < 1 ? 'text-[var(--color-orange)] bg-[var(--color-orange)]/8' :
                 adaptation.factor > 1 ? 'text-[var(--color-accent)] bg-[var(--color-accent)]/8' :
                 'text-[var(--color-label-3)] bg-[var(--color-surface-2)]'
               )}>
-                <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-                上周 {adaptation.checkedCount}/{adaptation.totalWorkouts} 打卡 · {adaptation.advice}
+                <CheckCircle2 className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                <span className="min-w-0">
+                  该周 {adaptation.checkedCount}/{adaptation.totalWorkouts} 打卡 · {adaptation.advice}
+                </span>
               </div>
             )}
           </div>
@@ -709,11 +719,21 @@ export function CalendarView() {
                     <p className="text-[12px] text-[var(--color-label-3)] leading-relaxed">
                       将推送 <span className="text-white font-semibold">{workoutCount} 节课</span>到你的 Intervals.icu 日历。确保已在 Intervals.icu 设置页连接了 Garmin / COROS 账号。
                     </p>
+                    <p className="text-[11px] text-[var(--color-orange)]/90 leading-relaxed">
+                      安全提示：API Key 仅保留在当前页面会话，不会写入本地存储。关闭标签页后需重新粘贴。
+                    </p>
                     <button
                       onClick={() => handleICUSync(icuApiKey, icuAthleteId)}
                       className="w-full bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[15px]"
                     >
                       开始同步 {workoutCount} 节课
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { clearICUCredentials(); setIcuKeyInput(''); }}
+                      className="w-full py-3 text-[13px] font-medium text-[var(--color-label-2)] bg-[var(--color-surface-2)] rounded-2xl"
+                    >
+                      清除本页密钥
                     </button>
                   </div>
                 ) : (
@@ -721,6 +741,9 @@ export function CalendarView() {
                   <div className="space-y-4">
                     <p className="text-[13px] text-[var(--color-label-2)] leading-relaxed">
                       在 <span className="text-white">intervals.icu → 设置 → Developer Settings</span> 生成 API Key，再从地址栏复制你的 Athlete ID（如 <span className="font-mono text-white">i12345</span>）。
+                    </p>
+                    <p className="text-[11px] text-[var(--color-orange)]/90 leading-relaxed">
+                      安全提示：API Key 仅保留在当前页面会话，不会写入本地存储；Athlete ID 可记住以便下次填写。
                     </p>
                     <div>
                       <p className="text-[12px] text-[var(--color-label-3)] mb-1.5">API Key</p>
@@ -966,16 +989,34 @@ export function CalendarView() {
         </div>
       )}
 
+      {calView === 'week' && adaptationMeta.active && (
+        <div className={cn(
+          'mb-3 rounded-2xl px-3 py-2.5 text-[12px] font-medium leading-relaxed break-words',
+          adaptationMeta.factor < 1
+            ? 'text-[var(--color-orange)] bg-[var(--color-orange)]/10 border border-[var(--color-orange)]/25'
+            : 'text-[var(--color-accent)] bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25'
+        )}>
+          <p className="font-semibold mb-0.5">
+            本周已按上周完成情况自适应
+            {adaptationMeta.factor < 1
+              ? `（距离 −${Math.round((1 - adaptationMeta.factor) * 100)}%）`
+              : `（距离 +${Math.round((adaptationMeta.factor - 1) * 100)}%）`}
+          </p>
+          <p className="text-[11px] opacity-90 font-normal">{adaptationMeta.advice}</p>
+          <p className="text-[10px] opacity-70 font-normal mt-1">配速与比赛日不变；Rest / Race 不调整。</p>
+        </div>
+      )}
+
       {calView === 'week' && (
         <div className="bg-[var(--color-surface)] rounded-3xl overflow-hidden mb-4">
-          <div className="px-4 py-4 border-b border-[var(--color-separator)] flex items-center justify-between">
-            <div>
+          <div className="px-4 py-4 border-b border-[var(--color-separator)] flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold text-[var(--color-label-3)] uppercase tracking-wider mb-1">本周训练</p>
-              <h2 className="text-[20px] font-bold text-white">
+              <h2 className="text-[20px] font-bold text-white truncate">
                 {format(currentWeekStart, 'M月d日', { locale: zhCN })} - {format(currentWeekEnd, 'M月d日', { locale: zhCN })}
               </h2>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0">
               <p className="text-[22px] font-bold text-[var(--color-accent)] tabular-nums leading-none">{currentWeekVolume}</p>
               <p className="text-[10px] text-[var(--color-label-3)] mt-1">本周 · {currentWeekWorkoutCount} 节</p>
             </div>
