@@ -4,6 +4,14 @@ import type { UserProfile, DailyWorkout } from '../utils/training-engine';
 import { generateTrainingPlan } from '../utils/training-engine';
 import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
+import {
+  migrateExportSyncState,
+  recordFitExportSuccess,
+  recordFullChannelSuccess,
+  type ExportChannel,
+  type ExportSyncState,
+  type FitExportRange,
+} from '../utils/plan-fingerprint';
 import { addDays, format } from 'date-fns';
 
 type TabType = 'profile' | 'stats' | 'calendar' | 'races';
@@ -78,6 +86,8 @@ interface AppState {
   icuAthleteId: string;
   myRaces: MyRace[];
   vacations: Vacation[];
+  /** 分渠道最后成功导出/同步元数据（本地）；从未成功则为空 */
+  exportSync: ExportSyncState;
 
   updateProfile: (updates: Partial<UserProfile>) => void;
   generatePlan: () => void;
@@ -91,6 +101,16 @@ interface AppState {
   updateMyRaceGoal: (raceId: string, goal: MyRaceGoal) => void;
   addVacation: (start: string, end: string, label?: string) => void;
   removeVacation: (id: string) => void;
+  /**
+   * 仅在真实成功回调后写入。
+   * - FIT：传 effectivePlan + range，按作用域记指纹（窄范围不覆盖宽范围）
+   * - ICS/ICU：传全计划指纹；ICU 须 allSucceeded
+   */
+  markExportSuccess: (
+    channel: ExportChannel,
+    planOrFingerprint: DailyWorkout[] | string,
+    range?: FitExportRange,
+  ) => void;
 }
 
 /**
@@ -130,6 +150,26 @@ const defaultProfile: UserProfile = {
   longRunDay: 0,
 };
 
+/** 从 persist 根或嵌套 state 取出可写 state 对象，并剔除 icuApiKey */
+function stripApiKeyAndNormalizeExport(
+  persisted: unknown,
+): unknown {
+  if (!persisted || typeof persisted !== 'object') return persisted;
+  const root = persisted as Record<string, unknown>;
+
+  // zustand persist 常见形状：{ state, version } 或直接 state
+  const stateBag: Record<string, unknown> =
+    root.state && typeof root.state === 'object'
+      ? (root.state as Record<string, unknown>)
+      : root;
+
+  if ('icuApiKey' in stateBag) delete stateBag.icuApiKey;
+  if (stateBag !== root && 'icuApiKey' in root) delete root.icuApiKey;
+
+  stateBag.exportSync = migrateExportSyncState(stateBag.exportSync);
+  return persisted;
+}
+
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -143,9 +183,36 @@ export const useStore = create<AppState>()(
       icuAthleteId: '',
       myRaces: [],
       vacations: [],
+      exportSync: {},
 
       updateProfile: (updates) => {
         set({ profile: { ...get().profile, ...updates } });
+      },
+
+      markExportSuccess: (channel, planOrFingerprint, range) => {
+        set(state => {
+          const prev = state.exportSync ?? {};
+          if (channel === 'fit') {
+            if (!Array.isArray(planOrFingerprint) || !range) return {};
+            return {
+              exportSync: recordFitExportSuccess(
+                prev,
+                planOrFingerprint,
+                range,
+              ),
+            };
+          }
+          if (typeof planOrFingerprint !== 'string' || !planOrFingerprint) {
+            return {};
+          }
+          return {
+            exportSync: recordFullChannelSuccess(
+              prev,
+              channel,
+              planOrFingerprint,
+            ),
+          };
+        });
       },
 
       generatePlan: () => {
@@ -230,43 +297,32 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'marathon-training-storage',
+      // v4：FIT 分作用域元数据；旧 v3 单条 fit 安全迁移
+      version: 4,
       // 安全：API Key 不得写入 localStorage；仅会话内存保留
       partialize: (state) => {
         const {
           icuApiKey: _omitKey,
-          // 其余全部持久化
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
-          completions, icuAthleteId, myRaces, vacations,
+          completions, icuAthleteId, myRaces, vacations, exportSync,
         } = state;
         void _omitKey;
         return {
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
-          completions, icuAthleteId, myRaces, vacations,
+          completions, icuAthleteId, myRaces, vacations, exportSync,
         };
       },
-      // 旧版本可能已把 icuApiKey 写入 storage，迁移时剔除
-      migrate: (persisted: unknown) => {
-        if (persisted && typeof persisted === 'object') {
-          const p = persisted as Record<string, unknown>;
-          if ('icuApiKey' in p) {
-            delete p.icuApiKey;
-          }
-          // zustand persist v4 可能是 { state, version }
-          if (p.state && typeof p.state === 'object') {
-            const s = p.state as Record<string, unknown>;
-            if ('icuApiKey' in s) delete s.icuApiKey;
-          }
-        }
-        return persisted as never;
+      migrate: (persisted: unknown, _fromVersion: number) => {
+        void _fromVersion;
+        return stripApiKeyAndNormalizeExport(persisted) as never;
       },
-      version: 2,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
-        // 强制：即使旧数据漏网，也不恢复 key
         return {
           ...current,
           ...p,
           icuApiKey: '',
+          exportSync: migrateExportSyncState(p.exportSync),
         };
       },
     }

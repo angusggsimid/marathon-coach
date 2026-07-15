@@ -5,17 +5,34 @@ import { useBasePlan, useEffectivePlan } from '../hooks/useEffectivePlan';
 import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import type { CheckInMessage } from '../utils/checkin-messages';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy, ChevronDown } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
-import { downloadAllFIT } from '../utils/export-fit';
-import { syncPlanToICU } from '../utils/intervals-icu';
+import {
+  ICU_IDEMPOTENT_SYNC_PROVEN,
+  ICU_RESYNC_WARNING,
+  syncPlanToICU,
+} from '../utils/intervals-icu';
 import type { ICUSyncProgress } from '../utils/intervals-icu';
 import { format, startOfWeek, addDays, addMonths, isSameMonth, isSameDay, startOfMonth, endOfMonth, endOfWeek, differenceInWeeks, isPast, isToday } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DailyWorkout, WorkoutSegment } from '../utils/training-engine';
-import { getActiveAdaptationMeta } from '../utils/weekly-adaptation';
 import { cn } from '../utils/cn';
+import {
+  buildWeekSnapshot,
+  formatWeeklyReportText,
+} from '../utils/week-snapshot';
+import {
+  isChannelStale,
+  isFitChannelStale,
+  planFingerprint,
+  type FitExportRange,
+} from '../utils/plan-fingerprint';
+import {
+  buildFitRangeOptions,
+  downloadFitByRange,
+} from '../utils/fit-export-range';
+import type { ICUSyncResult } from '../utils/intervals-icu';
 
 // ─── Check-in Modal ───────────────────────────────────────────────────────────
 
@@ -119,10 +136,15 @@ function CheckInModal({ workout, existing, onSave, onClose }: CheckInModalProps)
 // ─── Main CalendarView ────────────────────────────────────────────────────────
 
 // ICU sync view states within the export sheet
-type ICUView = 'menu' | 'setup' | 'syncing' | 'done';
+type ICUView = 'menu' | 'fit-range' | 'setup' | 'syncing' | 'done';
 
 export function CalendarView() {
-  const { profile, completions, logCompletion, getWeeklyAdaptation, icuApiKey, icuAthleteId, saveICUCredentials, clearICUCredentials, vacations, addVacation, removeVacation, myRaces } = useStore();
+  const {
+    profile, completions, logCompletion, getWeeklyAdaptation,
+    icuApiKey, icuAthleteId, saveICUCredentials, clearICUCredentials,
+    vacations, addVacation, removeVacation, myRaces,
+    exportSync, markExportSuccess,
+  } = useStore();
   const basePlan = useBasePlan();
   const plan = useEffectivePlan();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -133,6 +155,13 @@ export function CalendarView() {
   const [shareCopied, setShareCopied] = useState(false);
   const [calView, setCalView] = useState<'week' | 'calendar' | 'log'>('week');
   const [quoteToast, setQuoteToast] = useState<CheckInMessage | null>(null);
+  const [proofExpanded, setProofExpanded] = useState(false);
+  // 周日/周一默认展开周报权重；其余折叠，用户可手动开
+  const [reportExpanded, setReportExpanded] = useState(() => {
+    const d = new Date().getDay();
+    return d === 0 || d === 1;
+  });
+  const [reportCopyState, setReportCopyState] = useState<'idle' | 'ok' | 'fail'>('idle');
 
   // ── Vacation sheet state ──
   const [showVacation, setShowVacation]   = useState(false);
@@ -151,9 +180,22 @@ export function CalendarView() {
   const [icuKeyInput, setIcuKeyInput] = useState('');
   const [icuIdInput, setIcuIdInput] = useState('');
   const [icuProgress, setIcuProgress] = useState<ICUSyncProgress | null>(null);
-  const [icuResult, setIcuResult] = useState<{ success: number; failed: number; firstError?: string } | null>(null);
+  const [icuResult, setIcuResult] = useState<ICUSyncResult | null>(null);
+  const [icuAckDuplicate, setIcuAckDuplicate] = useState(false);
 
   const workoutCount = plan.filter(w => w.workoutType !== 'Rest').length;
+  const currentPlanFp = useMemo(() => planFingerprint(plan), [plan]);
+  // 同一 snapshot：basePlan 算系数，effectivePlan 供本周关键课距离
+  const weekSnap = useMemo(
+    () => buildWeekSnapshot(basePlan, completions, new Date(), plan),
+    [basePlan, completions, plan],
+  );
+  const fitOptions = useMemo(() => buildFitRangeOptions(plan), [plan]);
+  const staleFit = isFitChannelStale(exportSync?.fit, plan);
+  const staleIcs = isChannelStale(exportSync?.ics, currentPlanFp);
+  const staleIcu = isChannelStale(exportSync?.icu, currentPlanFp);
+  const hasAnyStale = staleFit || staleIcs || staleIcu;
+  const everSyncedIcu = !!exportSync?.icu?.exportedAt;
 
   const handleICUSync = async (apiKey: string, athleteId: string) => {
     saveICUCredentials(apiKey, athleteId);
@@ -161,7 +203,50 @@ export function CalendarView() {
     setIcuProgress({ current: 0, total: workoutCount });
     const result = await syncPlanToICU(plan, apiKey, athleteId, setIcuProgress);
     setIcuResult(result);
+    // 仅全量成功才记渠道元数据；部分成功保留 stale
+    if (result.allSucceeded) {
+      markExportSuccess('icu', currentPlanFp);
+    }
     setIcuView('done');
+  };
+
+  const handleFitExport = (range: FitExportRange) => {
+    const res = downloadFitByRange(plan, range);
+    if (res.ok) {
+      // 传入 effectivePlan：按范围切片记指纹，不覆盖其他 range 槽位
+      markExportSuccess('fit', plan, range);
+      closeExport();
+    }
+  };
+
+  const handleIcsExport = () => {
+    downloadICS(plan);
+    markExportSuccess('ics', currentPlanFp);
+    closeExport();
+  };
+
+  const copyWeeklyReport = async () => {
+    const text = formatWeeklyReportText(weekSnap);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!ok) throw new Error('copy failed');
+      }
+      setReportCopyState('ok');
+      setTimeout(() => setReportCopyState('idle'), 2200);
+    } catch {
+      setReportCopyState('fail');
+      setTimeout(() => setReportCopyState('idle'), 3200);
+    }
   };
 
   const handleVacationSave = () => {
@@ -175,7 +260,12 @@ export function CalendarView() {
   const closeExport = () => {
     setShowExport(false);
     // Reset ICU state after sheet closes
-    setTimeout(() => { setIcuView('menu'); setIcuProgress(null); setIcuResult(null); }, 300);
+    setTimeout(() => {
+      setIcuView('menu');
+      setIcuProgress(null);
+      setIcuResult(null);
+      setIcuAckDuplicate(false);
+    }, 300);
   };
 
   const copyShareText = async () => {
@@ -238,8 +328,6 @@ export function CalendarView() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const currentWeekVolume = Math.round(currentWeekWorkouts.reduce((sum, w) => sum + (w.distanceKm || 0), 0) * 10) / 10;
   const currentWeekWorkoutCount = currentWeekWorkouts.filter(w => w.workoutType !== 'Rest').length;
-  // 自适应元数据：与 applyWeeklyAdaptation 同一底表（race+vacation 后、缩放前）
-  const adaptationMeta = getActiveAdaptationMeta(basePlan, completions);
   const targetRace = myRaces.find(r => r.date === profile.raceDate && !r.dateTBD);
   const targetRaceName = targetRace?.name ?? (profile.raceType === 'full' ? '全马目标赛' : '半马目标赛');
   const shareText = [
@@ -616,7 +704,7 @@ export function CalendarView() {
       {showExport && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-          onClick={icuView === 'menu' ? closeExport : undefined}
+          onClick={icuView === 'menu' || icuView === 'fit-range' ? closeExport : undefined}
         >
           <div
             className="bg-[var(--color-surface)] rounded-t-3xl w-full max-w-lg pb-safe animate-in slide-in-from-bottom duration-250"
@@ -632,54 +720,58 @@ export function CalendarView() {
               <>
                 <div className="px-5 pb-2">
                   <p className="text-[17px] font-semibold text-white mb-1">导出训练计划</p>
-                  <p className="text-[12px] text-[var(--color-label-3)]">全部 {workoutCount} 节课程</p>
+                  <p className="text-[12px] text-[var(--color-label-3)]">使用最新有效计划 · 共 {workoutCount} 节可导出</p>
                 </div>
                 <div className="px-4 pb-8 space-y-2.5 mt-3">
 
                   {/* ICS */}
                   <button
-                    onClick={() => { downloadICS(plan); closeExport(); }}
+                    onClick={handleIcsExport}
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-blue)]/15 flex items-center justify-center flex-shrink-0">
                       <CalendarPlus className="w-5 h-5 text-[var(--color-blue)]" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[15px] font-semibold text-white">导入日历</p>
                       <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">iOS 日历 · Google Calendar · Outlook</p>
                     </div>
                   </button>
 
-                  {/* FIT ZIP */}
+                  {/* FIT：进入范围选择 */}
                   <button
-                    onClick={() => { downloadAllFIT(plan); closeExport(); }}
+                    onClick={() => setIcuView('fit-range')}
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-accent)]/15 flex items-center justify-center flex-shrink-0">
                       <Download className="w-5 h-5 text-[var(--color-accent)]" />
                     </div>
-                    <div>
-                      <p className="text-[15px] font-semibold text-white">Garmin / Polar / Suunto <span className="text-[12px] font-normal text-[var(--color-label-3)]">.fit × {workoutCount}</span></p>
-                      <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">下载 ZIP → 导入 Garmin Connect / Polar Flow</p>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold text-white">Garmin / Polar / Suunto <span className="text-[12px] font-normal text-[var(--color-label-3)]">.fit</span></p>
+                      <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">今天 / 本周 / 全部 · 显示文件数</p>
                     </div>
                   </button>
 
                   {/* Intervals.icu sync */}
                   <button
-                    onClick={() => setIcuView(icuApiKey ? 'setup' : 'setup')}
+                    onClick={() => { setIcuAckDuplicate(false); setIcuView('setup'); }}
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-purple)]/15 flex items-center justify-center flex-shrink-0">
                       <Activity className="w-5 h-5 text-[var(--color-purple)]" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-[15px] font-semibold text-white">同步到 Intervals.icu</p>
                         {icuApiKey && (
                           <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)]">已连接</span>
                         )}
                       </div>
-                      <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">自动推送到 Garmin · COROS · Wahoo · Polar</p>
+                      <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">
+                        {ICU_IDEMPOTENT_SYNC_PROVEN
+                          ? '自动推送到 Garmin · COROS · Wahoo · Polar'
+                          : '手动同步 · 重复推送可能产生重复事件'}
+                      </p>
                     </div>
                   </button>
 
@@ -691,6 +783,50 @@ export function CalendarView() {
                   </button>
                 </div>
               </>
+            )}
+
+            {/* ── FIT range picker ── */}
+            {icuView === 'fit-range' && (
+              <div className="px-5 pb-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <button type="button" onClick={() => setIcuView('menu')} className="text-[var(--color-accent)] text-[14px]">← 返回</button>
+                  <p className="text-[17px] font-semibold text-white">导出 FIT 范围</p>
+                </div>
+                <p className="text-[12px] text-[var(--color-label-3)] mb-3 leading-relaxed">
+                  使用最新有效计划（含赛事覆盖、休假与周自适应）。ZIP 文件名含范围与日期。
+                </p>
+                <div className="space-y-2">
+                  {fitOptions.map(opt => (
+                    <button
+                      key={opt.range}
+                      type="button"
+                      disabled={opt.disabled}
+                      onClick={() => handleFitExport(opt.range)}
+                      className={cn(
+                        'w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left border transition-opacity',
+                        opt.disabled
+                          ? 'bg-[var(--color-surface-2)]/60 border-transparent opacity-50 cursor-not-allowed'
+                          : 'bg-[var(--color-surface-2)] border-transparent active:opacity-70',
+                      )}
+                    >
+                      <Download className={cn('w-4 h-4 flex-shrink-0', opt.disabled ? 'text-[var(--color-label-4)]' : 'text-[var(--color-accent)]')} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[15px] font-semibold text-white">{opt.label}</p>
+                        <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">
+                          {opt.disabled
+                            ? (opt.disabledReason ?? '无可导出文件')
+                            : `${opt.fileCount} 个 .fit 文件`}
+                        </p>
+                      </div>
+                      {!opt.disabled && (
+                        <span className="text-[12px] font-semibold text-[var(--color-accent)] tabular-nums flex-shrink-0">
+                          ×{opt.fileCount}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* ── Setup / confirm view ── */}
@@ -722,11 +858,30 @@ export function CalendarView() {
                     <p className="text-[11px] text-[var(--color-orange)]/90 leading-relaxed">
                       安全提示：API Key 仅保留在当前页面会话，不会写入本地存储。关闭标签页后需重新粘贴。
                     </p>
+                    {!ICU_IDEMPOTENT_SYNC_PROVEN && everSyncedIcu && (
+                      <div className="rounded-xl border border-[var(--color-orange)]/30 bg-[var(--color-orange)]/10 px-3 py-2.5">
+                        <p className="text-[11px] text-[var(--color-orange)] leading-relaxed font-medium">
+                          {ICU_RESYNC_WARNING}
+                        </p>
+                        <label className="mt-2 flex items-start gap-2 text-[11px] text-[var(--color-label-2)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={icuAckDuplicate}
+                            onChange={e => setIcuAckDuplicate(e.target.checked)}
+                            className="mt-0.5"
+                          />
+                          <span>我已了解可能产生重复事件，并已自行清理或接受风险</span>
+                        </label>
+                      </div>
+                    )}
                     <button
                       onClick={() => handleICUSync(icuApiKey, icuAthleteId)}
-                      className="w-full bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[15px]"
+                      disabled={!ICU_IDEMPOTENT_SYNC_PROVEN && everSyncedIcu && !icuAckDuplicate}
+                      className="w-full bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[15px] disabled:opacity-30"
                     >
-                      开始同步 {workoutCount} 节课
+                      {everSyncedIcu && !ICU_IDEMPOTENT_SYNC_PROVEN
+                        ? `确认后再次同步 ${workoutCount} 节课`
+                        : `开始同步 ${workoutCount} 节课`}
                     </button>
                     <button
                       type="button"
@@ -802,11 +957,11 @@ export function CalendarView() {
               <div className="px-5 pb-10 flex flex-col items-center text-center">
                 <div className={cn(
                   'w-14 h-14 rounded-full flex items-center justify-center mb-4 mt-2',
-                  icuResult.failed === 0 ? 'bg-[var(--color-accent)]/15' : 'bg-[var(--color-orange)]/15'
+                  icuResult.allSucceeded ? 'bg-[var(--color-accent)]/15' : 'bg-[var(--color-orange)]/15'
                 )}>
-                  <CheckCircle2 className={cn('w-7 h-7', icuResult.failed === 0 ? 'text-[var(--color-accent)]' : 'text-[var(--color-orange)]')} />
+                  <CheckCircle2 className={cn('w-7 h-7', icuResult.allSucceeded ? 'text-[var(--color-accent)]' : 'text-[var(--color-orange)]')} />
                 </div>
-                {icuResult.failed === 0 ? (
+                {icuResult.allSucceeded ? (
                   <>
                     <p className="text-[17px] font-semibold text-white mb-1">同步完成 🎉</p>
                     <p className="text-[13px] text-[var(--color-label-3)] leading-relaxed">
@@ -815,10 +970,25 @@ export function CalendarView() {
                   </>
                 ) : (
                   <>
-                    <p className="text-[17px] font-semibold text-white mb-1">部分同步失败</p>
-                    <p className="text-[13px] text-[var(--color-label-3)] leading-relaxed">
-                      成功 {icuResult.success} 节，失败 {icuResult.failed} 节。
-                      {icuResult.firstError && <span className="block mt-1 font-mono text-[11px] text-[var(--color-red)]">{icuResult.firstError}</span>}
+                    <p className="text-[17px] font-semibold text-white mb-1">
+                      {icuResult.success > 0 ? '部分同步失败' : '同步失败'}
+                    </p>
+                    <p
+                      className="text-[13px] text-[var(--color-label-3)] leading-relaxed"
+                      data-testid="icu-partial-result"
+                    >
+                      成功 {icuResult.success} 节，失败 {icuResult.failed} 节
+                      {icuResult.total > 0 ? `（共 ${icuResult.total} 节）` : ''}。
+                      {icuResult.success > 0 && (
+                        <span className="block mt-1 text-[var(--color-orange)]">
+                          未全部成功，不标记为已同步；计划过期提醒仍保留。
+                        </span>
+                      )}
+                      {icuResult.firstError && (
+                        <span className="block mt-1 font-mono text-[11px] text-[var(--color-red)]">
+                          {icuResult.firstError}
+                        </span>
+                      )}
                     </p>
                   </>
                 )}
@@ -989,21 +1159,152 @@ export function CalendarView() {
         </div>
       )}
 
-      {calView === 'week' && adaptationMeta.active && (
-        <div className={cn(
-          'mb-3 rounded-2xl px-3 py-2.5 text-[12px] font-medium leading-relaxed break-words',
-          adaptationMeta.factor < 1
-            ? 'text-[var(--color-orange)] bg-[var(--color-orange)]/10 border border-[var(--color-orange)]/25'
-            : 'text-[var(--color-accent)] bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25'
-        )}>
-          <p className="font-semibold mb-0.5">
-            本周已按上周完成情况自适应
-            {adaptationMeta.factor < 1
-              ? `（距离 −${Math.round((1 - adaptationMeta.factor) * 100)}%）`
-              : `（距离 +${Math.round((adaptationMeta.factor - 1) * 100)}%）`}
-          </p>
-          <p className="text-[11px] opacity-90 font-normal">{adaptationMeta.advice}</p>
-          <p className="text-[10px] opacity-70 font-normal mt-1">配速与比赛日不变；Rest / Race 不调整。</p>
+      {/* 本周状态区：证明 + 周报 + 过期提醒（非三张等重卡片） */}
+      {calView === 'week' && (
+        <div className="mb-3 space-y-2 min-w-0" data-testid="week-status">
+          {/* A. 三行证明：仅 factor≠1 且 active */}
+          {weekSnap.showProofCard && weekSnap.proof && (
+            <div
+              className={cn(
+                'rounded-2xl px-3 py-2.5 text-[12px] leading-relaxed break-words min-w-0',
+                weekSnap.factor < 1
+                  ? 'text-[var(--color-orange)] bg-[var(--color-orange)]/10 border border-[var(--color-orange)]/25'
+                  : 'text-[var(--color-accent)] bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25',
+              )}
+              data-testid="adaptation-proof"
+            >
+              <p className="font-semibold">① 改了什么：{weekSnap.proof.change}</p>
+              <p className="mt-1 font-medium opacity-95">② 依据什么：{weekSnap.proof.evidence}</p>
+              <p className="mt-1 font-medium opacity-95">③ 什么没变：{weekSnap.proof.unchanged}</p>
+              <button
+                type="button"
+                aria-expanded={proofExpanded}
+                onClick={() => setProofExpanded(v => !v)}
+                className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold opacity-90 underline-offset-2 hover:underline"
+              >
+                <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', proofExpanded && 'rotate-180')} />
+                {proofExpanded ? '收起证据' : '展开证据'}
+              </button>
+              {proofExpanded && (
+                <div className="mt-2 pt-2 border-t border-current/15 text-[11px] font-normal opacity-90 space-y-0.5">
+                  <p>上一完整周：{weekSnap.prevWeekStart} ~ {weekSnap.prevWeekEnd}</p>
+                  <p>打卡 {weekSnap.checkedCount}/{weekSnap.planWorkoutCount} · 完成率 {Math.round(weekSnap.completionRate * 100)}%</p>
+                  <p>平均 RPE：{weekSnap.avgRpe.toFixed(1)}（{weekSnap.avgRpeLabel}）</p>
+                  <p>本周作用范围：{weekSnap.targetWeekStart} ~ {weekSnap.targetWeekEnd}</p>
+                  <p className="opacity-80">{weekSnap.advice}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* B. 轻量周报（折叠；周日/周一略加重） */}
+          <div
+            className={cn(
+              'rounded-2xl px-3 py-2 min-w-0 border',
+              weekSnap.highlightReport
+                ? 'bg-[var(--color-surface)] border-[var(--color-separator)]'
+                : 'bg-[var(--color-surface)]/70 border-transparent',
+            )}
+            data-testid="weekly-report"
+          >
+            <button
+              type="button"
+              aria-expanded={reportExpanded}
+              onClick={() => setReportExpanded(v => !v)}
+              className="w-full flex items-center justify-between gap-2 text-left min-w-0"
+            >
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-[var(--color-label-3)] uppercase tracking-wider">
+                  上周 60 秒小结
+                  {weekSnap.highlightReport ? ' · 周末回顾' : ''}
+                </p>
+                <p className="text-[13px] font-medium text-white truncate mt-0.5">
+                  {weekSnap.hasCheckins
+                    ? weekSnap.factor === 1 || !weekSnap.adaptationActive
+                      ? '计划保持 · 可查看完成与体感'
+                      : weekSnap.proof?.change ?? '已根据上周打卡调整'
+                    : '暂无打卡 · 补记后生成周报'}
+                </p>
+              </div>
+              <ChevronDown className={cn(
+                'w-4 h-4 text-[var(--color-label-3)] flex-shrink-0 transition-transform',
+                reportExpanded && 'rotate-180',
+              )} />
+            </button>
+            {reportExpanded && (
+              <div className="mt-2 pt-2 border-t border-[var(--color-separator)] space-y-1.5">
+                {weekSnap.emptyMessage ? (
+                  <div className="space-y-2">
+                    <p className="text-[12px] text-[var(--color-label-2)] leading-relaxed">{weekSnap.emptyMessage}</p>
+                    <button
+                      type="button"
+                      onClick={() => setCalView('log')}
+                      className="text-[12px] font-semibold text-[var(--color-accent)]"
+                    >
+                      去补记打卡
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="space-y-1">
+                    {weekSnap.reportLines.map((line, i) => (
+                      <li key={i} className="text-[12px] text-[var(--color-label-2)] leading-relaxed break-words">
+                        · {line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!weekSnap.showProofCard && weekSnap.hasCheckins && weekSnap.factor === 1 && (
+                  <p className="text-[11px] text-[var(--color-label-3)]">保持计划，无强调调整卡。</p>
+                )}
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={copyWeeklyReport}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-accent)] px-2 py-1 rounded-lg bg-[var(--color-accent)]/10"
+                  >
+                    <Copy className="w-3 h-3" />
+                    复制周报
+                  </button>
+                  {reportCopyState === 'ok' && (
+                    <span className="text-[11px] text-[var(--color-accent)]">已复制</span>
+                  )}
+                  {reportCopyState === 'fail' && (
+                    <span className="text-[11px] text-[var(--color-orange)]">复制失败，请长按选择文本</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* D. 计划版本过期提醒：非阻塞、分渠道 */}
+          {hasAnyStale && (
+            <div
+              className="rounded-2xl px-3 py-2.5 border border-[var(--color-orange)]/25 bg-[var(--color-orange)]/8 min-w-0"
+              data-testid="plan-stale-banner"
+              role="status"
+            >
+              <p className="text-[12px] font-semibold text-[var(--color-orange)] leading-relaxed break-words">
+                训练计划已更新，你之前导出或同步的版本可能已过期。
+              </p>
+              <ul className="mt-1.5 space-y-0.5 text-[11px] text-[var(--color-label-2)]">
+                {staleFit && <li>· Garmin FIT 导出版本可能过期</li>}
+                {staleIcs && <li>· 日历 ICS 导出版本可能过期</li>}
+                {staleIcu && <li>· Intervals.icu 同步版本可能过期</li>}
+              </ul>
+              <button
+                type="button"
+                onClick={() => setShowExport(true)}
+                className="mt-2 text-[11px] font-semibold text-[var(--color-accent)]"
+              >
+                重新导出 / 同步
+              </button>
+              {staleIcu && !ICU_IDEMPOTENT_SYNC_PROVEN && (
+                <p className="mt-1 text-[10px] text-[var(--color-label-3)] leading-relaxed">
+                  Intervals.icu 再次同步前请先清理旧事件；未验证幂等安全。
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
