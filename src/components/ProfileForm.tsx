@@ -9,6 +9,7 @@ import {
   hasUsablePerformance,
 } from '../utils/training-engine';
 import { cn } from '../utils/cn';
+import { DataBackupCard } from './DataBackupCard';
 
 function validateMMSS(val: string): boolean {
   if (!val) return true;
@@ -478,6 +479,9 @@ export function ProfileForm() {
           </button>
         </div>
       </div>
+
+      {/* 数据与备份：档案页信息架构，非独立营销页 */}
+      <DataBackupCard />
     </form>
   );
 }

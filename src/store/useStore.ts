@@ -12,6 +12,11 @@ import {
   type ExportSyncState,
   type FitExportRange,
 } from '../utils/plan-fingerprint';
+import {
+  toRestorableState,
+  type BackupData,
+} from '../utils/backup';
+import { normalizeWorkoutDate } from '../utils/training-engine';
 import { addDays, format } from 'date-fns';
 
 type TabType = 'profile' | 'stats' | 'calendar' | 'races';
@@ -111,6 +116,11 @@ interface AppState {
     planOrFingerprint: DailyWorkout[] | string,
     range?: FitExportRange,
   ) => void;
+  /**
+   * 从已校验备份恢复产品状态。
+   * 覆盖白名单字段；强制 icuApiKey=''；不改写 icuAthleteId（最小敏感：备份本身不含）。
+   */
+  restoreFromBackup: (data: BackupData) => void;
 }
 
 /**
@@ -213,6 +223,28 @@ export const useStore = create<AppState>()(
             ),
           };
         });
+      },
+
+      restoreFromBackup: (data) => {
+        const slice = toRestorableState(data);
+        set(state => ({
+          ...state,
+          profile: slice.profile,
+          plan: slice.plan.map(w => ({
+            ...w,
+            date: normalizeWorkoutDate(w.date as Date | string),
+          })),
+          completions: slice.completions,
+          myRaces: slice.myRaces,
+          vacations: slice.vacations,
+          isPlanGenerated: slice.isPlanGenerated,
+          planNeedsRegen: slice.planNeedsRegen,
+          exportSync: slice.exportSync,
+          // 不恢复备份中的 activeTab：固定档案页，避免成功反馈因跳转消失
+          activeTab: 'profile',
+          icuApiKey: '',
+          // 保留本地 Athlete ID（备份不含凭证类标识）
+        }));
       },
 
       generatePlan: () => {

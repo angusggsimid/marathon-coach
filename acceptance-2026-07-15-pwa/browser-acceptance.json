@@ -1,0 +1,535 @@
+{
+  "base": "http://127.0.0.1:4173",
+  "at": "2026-07-16T00:52:10.593Z",
+  "summary": {
+    "ok": 104,
+    "warn": 0,
+    "fail": 0,
+    "consoleErrors": 0,
+    "pageErrors": 0
+  },
+  "findings": [
+    {
+      "level": "OK",
+      "msg": "base http://127.0.0.1:4173",
+      "at": "2026-07-16T00:51:42.026Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /manifest.webmanifest → 200",
+      "at": "2026-07-16T00:51:42.039Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /pwa-192x192.png → 200",
+      "at": "2026-07-16T00:51:42.041Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /pwa-512x512.png → 200",
+      "at": "2026-07-16T00:51:42.043Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /pwa-512x512-maskable.png → 200",
+      "at": "2026-07-16T00:51:42.045Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /apple-touch-icon.png → 200",
+      "at": "2026-07-16T00:51:42.047Z"
+    },
+    {
+      "level": "OK",
+      "msg": "static /favicon.svg → 200",
+      "at": "2026-07-16T00:51:42.048Z"
+    },
+    {
+      "level": "OK",
+      "msg": "manifest has 3 png icons",
+      "at": "2026-07-16T00:51:42.051Z"
+    },
+    {
+      "level": "OK",
+      "msg": "manifest has maskable purpose",
+      "at": "2026-07-16T00:51:42.051Z"
+    },
+    {
+      "level": "OK",
+      "msg": "icon brand /pwa-192x192.png 192x192 green rgb(50,215,75)",
+      "at": "2026-07-16T00:51:42.558Z"
+    },
+    {
+      "level": "OK",
+      "msg": "icon brand /pwa-512x512.png 512x512 green rgb(50,215,75)",
+      "at": "2026-07-16T00:51:42.562Z"
+    },
+    {
+      "level": "OK",
+      "msg": "icon brand /apple-touch-icon.png 180x180 green rgb(50,215,75)",
+      "at": "2026-07-16T00:51:42.565Z"
+    },
+    {
+      "level": "OK",
+      "msg": "icon brand /pwa-512x512-maskable.png 512x512 green rgb(50,215,75)",
+      "at": "2026-07-16T00:51:42.571Z"
+    },
+    {
+      "level": "OK",
+      "msg": "favicon.svg brand green + runner path",
+      "at": "2026-07-16T00:51:42.580Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-hooks-plain: plain page has no __MARATHON_EXPORT_TEST__",
+      "at": "2026-07-16T00:51:43.265Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: bottom nav present y=722",
+      "at": "2026-07-16T00:51:44.431Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: no wechat banner in normal browser",
+      "at": "2026-07-16T00:51:44.433Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: data-backup-card visible",
+      "at": "2026-07-16T00:51:44.449Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: backup export filename marathon-backup-2026-07-16.json",
+      "at": "2026-07-16T00:51:44.530Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: backup payload schema ok",
+      "at": "2026-07-16T00:51:44.530Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: backup no api key",
+      "at": "2026-07-16T00:51:44.530Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: diagnostic schema",
+      "at": "2026-07-16T00:51:44.571Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: diagnostic privacy clean",
+      "at": "2026-07-16T00:51:44.572Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: backup reject bad json feedback",
+      "at": "2026-07-16T00:51:44.983Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: reject damaged details",
+      "at": "2026-07-16T00:51:45.394Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: restore confirm dialog",
+      "at": "2026-07-16T00:51:45.919Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: confirm fields omit activeTab",
+      "at": "2026-07-16T00:51:45.923Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: cancel did not write state",
+      "at": "2026-07-16T00:51:46.260Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: restore wrote completions",
+      "at": "2026-07-16T00:51:47.217Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: persist storage has no icuApiKey field",
+      "at": "2026-07-16T00:51:47.217Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: restore stays on profile tab",
+      "at": "2026-07-16T00:51:47.217Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: athlete id preserved locally",
+      "at": "2026-07-16T00:51:47.217Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: restore success feedback visible",
+      "at": "2026-07-16T00:51:47.219Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-1280: calendar open after restore, details text present",
+      "at": "2026-07-16T00:51:48.220Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: bottom nav present y=766",
+      "at": "2026-07-16T00:51:49.765Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: no wechat banner in normal browser",
+      "at": "2026-07-16T00:51:49.766Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: data-backup-card visible",
+      "at": "2026-07-16T00:51:49.783Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: backup export filename marathon-backup-2026-07-16.json",
+      "at": "2026-07-16T00:51:49.821Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: backup payload schema ok",
+      "at": "2026-07-16T00:51:49.822Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: backup no api key",
+      "at": "2026-07-16T00:51:49.822Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: diagnostic schema",
+      "at": "2026-07-16T00:51:49.862Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: diagnostic privacy clean",
+      "at": "2026-07-16T00:51:49.862Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: backup reject bad json feedback",
+      "at": "2026-07-16T00:51:50.270Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: reject damaged details",
+      "at": "2026-07-16T00:51:50.684Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: restore confirm dialog",
+      "at": "2026-07-16T00:51:51.202Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: confirm fields omit activeTab",
+      "at": "2026-07-16T00:51:51.205Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: cancel did not write state",
+      "at": "2026-07-16T00:51:51.546Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: restore wrote completions",
+      "at": "2026-07-16T00:51:52.498Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: persist storage has no icuApiKey field",
+      "at": "2026-07-16T00:51:52.498Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: restore stays on profile tab",
+      "at": "2026-07-16T00:51:52.498Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: athlete id preserved locally",
+      "at": "2026-07-16T00:51:52.498Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: restore success feedback visible",
+      "at": "2026-07-16T00:51:52.501Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-390: calendar open after restore, details text present",
+      "at": "2026-07-16T00:51:53.499Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: bottom nav present y=766",
+      "at": "2026-07-16T00:51:55.034Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: wechat banner visible",
+      "at": "2026-07-16T00:51:55.035Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: wechat banner text ok",
+      "at": "2026-07-16T00:51:55.037Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: wechat banner above bottom nav",
+      "at": "2026-07-16T00:51:55.039Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: data-backup-card visible",
+      "at": "2026-07-16T00:51:55.099Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: backup export filename marathon-backup-2026-07-16.json",
+      "at": "2026-07-16T00:51:55.137Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: backup payload schema ok",
+      "at": "2026-07-16T00:51:55.138Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: backup no api key",
+      "at": "2026-07-16T00:51:55.138Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: diagnostic schema",
+      "at": "2026-07-16T00:51:55.183Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: diagnostic privacy clean",
+      "at": "2026-07-16T00:51:55.183Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: backup reject bad json feedback",
+      "at": "2026-07-16T00:51:55.592Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: reject damaged details",
+      "at": "2026-07-16T00:51:56.003Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: restore confirm dialog",
+      "at": "2026-07-16T00:51:56.524Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: confirm fields omit activeTab",
+      "at": "2026-07-16T00:51:56.527Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: cancel did not write state",
+      "at": "2026-07-16T00:51:56.860Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: restore wrote completions",
+      "at": "2026-07-16T00:51:57.819Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: persist storage has no icuApiKey field",
+      "at": "2026-07-16T00:51:57.819Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: restore stays on profile tab",
+      "at": "2026-07-16T00:51:57.819Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: athlete id preserved locally",
+      "at": "2026-07-16T00:51:57.819Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: restore success feedback visible",
+      "at": "2026-07-16T00:51:57.822Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: calendar open after restore, details text present",
+      "at": "2026-07-16T00:51:58.839Z"
+    },
+    {
+      "level": "OK",
+      "msg": "mobile-wechat-390: wechat dismiss hides banner",
+      "at": "2026-07-16T00:51:59.374Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: bottom nav present y=722",
+      "at": "2026-07-16T00:52:00.550Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: wechat banner visible",
+      "at": "2026-07-16T00:52:00.551Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: wechat banner text ok",
+      "at": "2026-07-16T00:52:00.552Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: wechat banner above bottom nav",
+      "at": "2026-07-16T00:52:00.554Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: data-backup-card visible",
+      "at": "2026-07-16T00:52:00.615Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: backup export filename marathon-backup-2026-07-16.json",
+      "at": "2026-07-16T00:52:00.653Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: backup payload schema ok",
+      "at": "2026-07-16T00:52:00.653Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: backup no api key",
+      "at": "2026-07-16T00:52:00.653Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: diagnostic schema",
+      "at": "2026-07-16T00:52:00.697Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: diagnostic privacy clean",
+      "at": "2026-07-16T00:52:00.697Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: backup reject bad json feedback",
+      "at": "2026-07-16T00:52:01.106Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: reject damaged details",
+      "at": "2026-07-16T00:52:01.517Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: restore confirm dialog",
+      "at": "2026-07-16T00:52:02.035Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: confirm fields omit activeTab",
+      "at": "2026-07-16T00:52:02.038Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: cancel did not write state",
+      "at": "2026-07-16T00:52:02.374Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: restore wrote completions",
+      "at": "2026-07-16T00:52:03.311Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: persist storage has no icuApiKey field",
+      "at": "2026-07-16T00:52:03.311Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: restore stays on profile tab",
+      "at": "2026-07-16T00:52:03.311Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: athlete id preserved locally",
+      "at": "2026-07-16T00:52:03.311Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: restore success feedback visible",
+      "at": "2026-07-16T00:52:03.313Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: calendar open after restore, details text present",
+      "at": "2026-07-16T00:52:04.307Z"
+    },
+    {
+      "level": "OK",
+      "msg": "desktop-wechat: wechat dismiss hides banner",
+      "at": "2026-07-16T00:52:04.841Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: export test hooks present on acceptance URL",
+      "at": "2026-07-16T00:52:06.585Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: FIT fail shows sheet error: 导出失败，请重试",
+      "at": "2026-07-16T00:52:07.952Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: FIT error cleared on back to menu",
+      "at": "2026-07-16T00:52:08.197Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: ICS fail shows sheet error: 日历导出失败，请重试",
+      "at": "2026-07-16T00:52:08.529Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: ICS error cleared when open FIT range",
+      "at": "2026-07-16T00:52:08.759Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: no residual error after close+reopen",
+      "at": "2026-07-16T00:52:09.634Z"
+    },
+    {
+      "level": "OK",
+      "msg": "export-sheet-errors: FIT retry success closes sheet, clears error",
+      "at": "2026-07-16T00:52:10.545Z"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

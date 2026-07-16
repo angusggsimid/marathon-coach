@@ -13,6 +13,7 @@ import type { DailyWorkout } from './training-engine';
 import { toDateKey } from './weekly-adaptation';
 import { downloadAllFIT } from './export-fit';
 import type { FitExportRange } from './plan-fingerprint';
+import { isExportTestOverrideAllowed } from './export-test-gate';
 
 export type { FitExportRange };
 
@@ -106,30 +107,53 @@ export function fitZipFileName(
   return `garmin-workouts-${tag}-${day}.zip`;
 }
 
+export type FitDownloadImpl = (plan: DailyWorkout[], zipName: string) => void;
+
+/** 测试/验收注入：覆盖默认 downloadAllFIT；传 null 清除。生产域名下 no-op。 */
+let fitDownloadOverride: FitDownloadImpl | null = null;
+
+export function setFitDownloadOverrideForTest(impl: FitDownloadImpl | null): void {
+  if (!isExportTestOverrideAllowed()) return;
+  fitDownloadOverride = impl;
+}
+
 /**
  * 下载指定范围的 FIT ZIP。
  * 调用方应传入 effectivePlan，并在成功后记录 fit 渠道元数据。
+ * downloadImpl 可注入以便单元测试异常路径；全局 override 仅门禁放行时生效。
+ * 返回 ok 表示「浏览器下载已触发」，非用户已保存。
  */
 export function downloadFitByRange(
   plan: DailyWorkout[],
   range: FitExportRange,
   asOf: Date = new Date(),
+  downloadImpl?: FitDownloadImpl,
 ): { ok: boolean; fileCount: number; reason?: string } {
-  const filtered = filterPlanByFitRange(plan, range, asOf);
-  if (filtered.length === 0) {
+  const gatedOverride = isExportTestOverrideAllowed() ? fitDownloadOverride : null;
+  const impl = downloadImpl ?? gatedOverride ?? downloadAllFIT;
+  try {
+    const filtered = filterPlanByFitRange(plan, range, asOf);
+    if (filtered.length === 0) {
+      return {
+        ok: false,
+        fileCount: 0,
+        reason:
+          range === 'today'
+            ? '今天没有可导出的跑步训练'
+            : range === 'week'
+              ? '本周没有可导出的跑步训练'
+              : '没有可导出的跑步训练',
+      };
+    }
+    impl(filtered, fitZipFileName(range, asOf));
+    return { ok: true, fileCount: filtered.length };
+  } catch {
     return {
       ok: false,
       fileCount: 0,
-      reason:
-        range === 'today'
-          ? '今天没有可导出的跑步训练'
-          : range === 'week'
-            ? '本周没有可导出的跑步训练'
-            : '没有可导出的跑步训练',
+      reason: '导出失败，请重试',
     };
   }
-  downloadAllFIT(filtered, fitZipFileName(range, asOf));
-  return { ok: true, fileCount: filtered.length };
 }
 
 /** 本地周边界（供测试） */

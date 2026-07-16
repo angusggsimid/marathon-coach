@@ -33,6 +33,7 @@ import {
   downloadFitByRange,
 } from '../utils/fit-export-range';
 import type { ICUSyncResult } from '../utils/intervals-icu';
+import { mutateMetrics, recordChannelOutcome } from '../utils/local-metrics';
 
 // ─── Check-in Modal ───────────────────────────────────────────────────────────
 
@@ -182,6 +183,8 @@ export function CalendarView() {
   const [icuProgress, setIcuProgress] = useState<ICUSyncProgress | null>(null);
   const [icuResult, setIcuResult] = useState<ICUSyncResult | null>(null);
   const [icuAckDuplicate, setIcuAckDuplicate] = useState(false);
+  /** 导出 sheet 内可见错误（FIT/ICS）；视图切换/关闭/重试时清理 */
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const workoutCount = plan.filter(w => w.workoutType !== 'Rest').length;
   const currentPlanFp = useMemo(() => planFingerprint(plan), [plan]);
@@ -201,28 +204,91 @@ export function CalendarView() {
     saveICUCredentials(apiKey, athleteId);
     setIcuView('syncing');
     setIcuProgress({ current: 0, total: workoutCount });
-    const result = await syncPlanToICU(plan, apiKey, athleteId, setIcuProgress);
-    setIcuResult(result);
-    // 仅全量成功才记渠道元数据；部分成功保留 stale
-    if (result.allSucceeded) {
-      markExportSuccess('icu', currentPlanFp);
+    try {
+      const result = await syncPlanToICU(plan, apiKey, athleteId, setIcuProgress);
+      setIcuResult(result);
+      // 仅全量成功才记渠道元数据；部分成功保留 stale，且不得记完整成功指标
+      if (result.allSucceeded) {
+        markExportSuccess('icu', currentPlanFp);
+        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'success'));
+      } else if (result.success > 0 && result.failed > 0) {
+        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'partial'));
+      } else {
+        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'fail'));
+      }
+      setIcuView('done');
+    } catch (err) {
+      // 循环外异常（如同步函数本身 throw）：诚实全失败，退出 syncing，避免卡死
+      const failedTotal = Math.max(workoutCount, 1);
+      const result = {
+        success: 0,
+        failed: failedTotal,
+        total: failedTotal,
+        anySucceeded: false,
+        allSucceeded: false,
+        firstError: err instanceof Error ? err.message : String(err),
+      };
+      setIcuResult(result);
+      mutateMetrics(s => recordChannelOutcome(s, 'icu', 'fail'));
+      setIcuView('done');
     }
-    setIcuView('done');
   };
 
   const handleFitExport = (range: FitExportRange) => {
-    const res = downloadFitByRange(plan, range);
-    if (res.ok) {
-      // 传入 effectivePlan：按范围切片记指纹，不覆盖其他 range 槽位
-      markExportSuccess('fit', plan, range);
-      closeExport();
+    setExportError(null);
+    try {
+      const res = downloadFitByRange(plan, range);
+      if (res.ok) {
+        // 传入 effectivePlan：按范围切片记指纹，不覆盖其他 range 槽位
+        // ok = 浏览器下载已触发，非保证用户已保存
+        markExportSuccess('fit', plan, range);
+        mutateMetrics(s => recordChannelOutcome(s, 'fit', 'success'));
+        closeExport();
+      } else {
+        mutateMetrics(s => recordChannelOutcome(s, 'fit', 'fail'));
+        // 保持导出 sheet 可操作，在范围内展示 reason
+        setExportError(res.reason?.trim() || '导出失败，请重试');
+        setIcuView('fit-range');
+      }
+    } catch (err) {
+      mutateMetrics(s => recordChannelOutcome(s, 'fit', 'fail'));
+      setExportError(
+        err instanceof Error && err.message.trim()
+          ? `导出失败：${err.message.trim()}`
+          : '导出失败，请重试',
+      );
+      setIcuView('fit-range');
     }
   };
 
   const handleIcsExport = () => {
-    downloadICS(plan);
-    markExportSuccess('ics', currentPlanFp);
-    closeExport();
+    setExportError(null);
+    try {
+      downloadICS(plan);
+      markExportSuccess('ics', currentPlanFp);
+      mutateMetrics(s => recordChannelOutcome(s, 'ics', 'success'));
+      closeExport();
+    } catch {
+      mutateMetrics(s => recordChannelOutcome(s, 'ics', 'fail'));
+      // 留在菜单视图，错误在当前 sheet 内可见
+      setExportError('日历导出失败，请重试');
+    }
+  };
+
+  const goExportMenu = () => {
+    setExportError(null);
+    setIcuView('menu');
+  };
+
+  const goFitRange = () => {
+    setExportError(null);
+    setIcuView('fit-range');
+  };
+
+  const goIcuSetup = () => {
+    setExportError(null);
+    setIcuAckDuplicate(false);
+    setIcuView('setup');
   };
 
   const copyWeeklyReport = async () => {
@@ -259,12 +325,14 @@ export function CalendarView() {
 
   const closeExport = () => {
     setShowExport(false);
+    setExportError(null);
     // Reset ICU state after sheet closes
     setTimeout(() => {
       setIcuView('menu');
       setIcuProgress(null);
       setIcuResult(null);
       setIcuAckDuplicate(false);
+      setExportError(null);
     }, 300);
   };
 
@@ -559,6 +627,8 @@ export function CalendarView() {
               休假{vacations.length > 0 ? ` · ${vacations.length}` : ''}
             </button>
             <button
+              type="button"
+              data-testid="export-open"
               onClick={() => setShowExport(true)}
               className="flex items-center gap-1 bg-[var(--color-surface)] text-[var(--color-label-2)] text-[12px] font-medium px-2.5 py-2 rounded-xl active:opacity-60 transition-opacity"
             >
@@ -721,12 +791,22 @@ export function CalendarView() {
                 <div className="px-5 pb-2">
                   <p className="text-[17px] font-semibold text-white mb-1">导出训练计划</p>
                   <p className="text-[12px] text-[var(--color-label-3)]">使用最新有效计划 · 共 {workoutCount} 节可导出</p>
+                  {exportError && (
+                    <p
+                      data-testid="export-error"
+                      role="alert"
+                      className="mt-2 text-[12px] text-[var(--color-red)] leading-relaxed"
+                    >
+                      {exportError}
+                    </p>
+                  )}
                 </div>
                 <div className="px-4 pb-8 space-y-2.5 mt-3">
 
                   {/* ICS */}
                   <button
                     onClick={handleIcsExport}
+                    data-testid="export-ics"
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-blue)]/15 flex items-center justify-center flex-shrink-0">
@@ -740,7 +820,8 @@ export function CalendarView() {
 
                   {/* FIT：进入范围选择 */}
                   <button
-                    onClick={() => setIcuView('fit-range')}
+                    onClick={goFitRange}
+                    data-testid="export-fit-open"
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-accent)]/15 flex items-center justify-center flex-shrink-0">
@@ -754,7 +835,7 @@ export function CalendarView() {
 
                   {/* Intervals.icu sync */}
                   <button
-                    onClick={() => { setIcuAckDuplicate(false); setIcuView('setup'); }}
+                    onClick={goIcuSetup}
                     className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
                   >
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-purple)]/15 flex items-center justify-center flex-shrink-0">
@@ -787,19 +868,36 @@ export function CalendarView() {
 
             {/* ── FIT range picker ── */}
             {icuView === 'fit-range' && (
-              <div className="px-5 pb-8">
+              <div className="px-5 pb-8" data-testid="export-fit-range">
                 <div className="flex items-center gap-3 mb-4">
-                  <button type="button" onClick={() => setIcuView('menu')} className="text-[var(--color-accent)] text-[14px]">← 返回</button>
+                  <button
+                    type="button"
+                    data-testid="export-fit-back"
+                    onClick={goExportMenu}
+                    className="text-[var(--color-accent)] text-[14px]"
+                  >
+                    ← 返回
+                  </button>
                   <p className="text-[17px] font-semibold text-white">导出 FIT 范围</p>
                 </div>
                 <p className="text-[12px] text-[var(--color-label-3)] mb-3 leading-relaxed">
                   使用最新有效计划（含赛事覆盖、休假与周自适应）。ZIP 文件名含范围与日期。
                 </p>
+                {exportError && (
+                  <p
+                    data-testid="export-error"
+                    role="alert"
+                    className="mb-3 text-[12px] text-[var(--color-red)] leading-relaxed"
+                  >
+                    {exportError}
+                  </p>
+                )}
                 <div className="space-y-2">
                   {fitOptions.map(opt => (
                     <button
                       key={opt.range}
                       type="button"
+                      data-testid={`export-fit-${opt.range}`}
                       disabled={opt.disabled}
                       onClick={() => handleFitExport(opt.range)}
                       className={cn(
@@ -833,7 +931,7 @@ export function CalendarView() {
             {icuView === 'setup' && (
               <div className="px-5 pb-8">
                 <div className="flex items-center gap-3 mb-5">
-                  <button onClick={() => setIcuView('menu')} className="text-[var(--color-accent)] text-[14px]">← 返回</button>
+                  <button onClick={goExportMenu} className="text-[var(--color-accent)] text-[14px]">← 返回</button>
                   <p className="text-[17px] font-semibold text-white">Intervals.icu 同步</p>
                 </div>
 
@@ -1485,7 +1583,7 @@ export function CalendarView() {
                 </div>
               )}
 
-              {selectedWorkout.details ? (
+              {selectedWorkout.details && Array.isArray(selectedWorkout.details.main) ? (
                 <>
                   {selectedWorkout.details.warmup && (
                     <SegmentBlock

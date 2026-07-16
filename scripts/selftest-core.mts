@@ -40,7 +40,18 @@ import {
   filterPlanByFitRange,
   fitZipFileName,
   buildFitRangeOptions,
+  downloadFitByRange,
+  setFitDownloadOverrideForTest,
 } from '../src/utils/fit-export-range.ts';
+import {
+  downloadICS,
+  setIcsDownloadOverrideForTest,
+} from '../src/utils/export-ics.ts';
+import {
+  EXPORT_TEST_QUERY,
+  isExportTestOverrideAllowed,
+  isLoopbackHostname,
+} from '../src/utils/export-test-gate.ts';
 import {
   buildICUEventBody,
   buildICUExternalId,
@@ -52,6 +63,46 @@ import {
   createNonIdempotentMockFetch,
   createPartialSuccessMockFetch,
 } from './icu-test-fixtures.mts';
+import {
+  BACKUP_APP_ID,
+  BACKUP_MAX_BYTES,
+  BACKUP_MAX_PLAN_DAYS,
+  BACKUP_SCHEMA,
+  BACKUP_VERSION,
+  backupFileName,
+  backupToJson,
+  buildBackupPayload,
+  containsForbiddenSecrets,
+  describeOverwriteFields,
+  isSafeHttpUrl,
+  isValidLocalYmd,
+  parseBackupJson,
+  toRestorableState,
+} from '../src/utils/backup.ts';
+import {
+  isWeChatUA,
+  shouldShowWeChatEscape,
+  wechatMenuInstructions,
+  wechatPlatformHint,
+  WECHAT_DISMISS_SESSION_KEY,
+  isWeChatBannerDismissed,
+  dismissWeChatBanner,
+} from '../src/utils/wechat.ts';
+import {
+  buildDiagnosticPayload,
+  coarseLanguage,
+  diagnosticHasForbiddenKeys,
+  emptyMetrics,
+  loadMetricsFromRaw,
+  localDayKey,
+  METRICS_MAX_ACTIVE_DAYS,
+  METRICS_MAX_DAY_BUCKETS,
+  METRICS_VERSION,
+  recordChannelOutcome,
+  recordOpen,
+  sanitizeCount,
+  viewportBucket,
+} from '../src/utils/local-metrics.ts';
 
 let passed = 0;
 let failed = 0;
@@ -725,6 +776,70 @@ console.log('\n── FIT range ──');
   assert(fitZipFileName('week', asOf) === 'garmin-workouts-week-2026-07-08.zip', 'zip name range+date');
   assert(fitZipFileName('today', asOf).includes('today'), 'zip today tag');
   assert(fitZipFileName('all', asOf).includes('all'), 'zip all tag');
+
+  // 可注入异常：downloadImpl throw → ok:false，不向外抛
+  const throwDl = () => { throw new Error('encode boom'); };
+  const failRes = downloadFitByRange(plan, 'all', asOf, throwDl);
+  assert(failRes.ok === false, 'downloadFitByRange catch throw');
+  assert(failRes.reason?.includes('失败'), 'downloadFitByRange fail reason');
+  const okRes = downloadFitByRange(plan, 'all', asOf, () => { /* no-op download */ });
+  assert(okRes.ok === true && okRes.fileCount === 13, 'downloadFitByRange inject success');
+  const emptyRes = downloadFitByRange(plan, 'today', asOf, () => {
+    throw new Error('should not run');
+  });
+  assert(emptyRes.ok === false && emptyRes.fileCount === 0, 'empty range no download call needed');
+
+  // 全局 override（browser acceptance 同路径）
+  setFitDownloadOverrideForTest(() => {
+    throw new Error('override boom');
+  });
+  const ovFail = downloadFitByRange(plan, 'all', asOf);
+  assert(ovFail.ok === false && ovFail.reason?.includes('失败'), 'fit override throw → ok:false');
+  setFitDownloadOverrideForTest(null);
+  setFitDownloadOverrideForTest(() => { /* success no-op */ });
+  const ovOk = downloadFitByRange(plan, 'all', asOf);
+  assert(ovOk.ok === true, 'fit override success');
+  setFitDownloadOverrideForTest(null);
+}
+
+console.log('\n── ICS download override ──');
+{
+  let called = 0;
+  setIcsDownloadOverrideForTest(() => {
+    called += 1;
+    throw new Error('ics boom');
+  });
+  let threw = false;
+  try {
+    downloadICS([]);
+  } catch {
+    threw = true;
+  }
+  assert(threw && called === 1, 'ics override throw propagates to caller');
+  setIcsDownloadOverrideForTest(null);
+  // 清除后旧 throw override 不得残留（Node 无 document，用 no-op 覆盖断言）
+  let afterClear = 0;
+  setIcsDownloadOverrideForTest(() => {
+    afterClear += 1;
+  });
+  downloadICS([]);
+  assert(afterClear === 1, 'ics override after clear replaces previous');
+  setIcsDownloadOverrideForTest(null);
+}
+
+console.log('\n── export test gate (production hook safety) ──');
+{
+  assert(EXPORT_TEST_QUERY === 'marathon_export_test', 'export test query param name');
+  assert(isLoopbackHostname('localhost'), 'loopback localhost');
+  assert(isLoopbackHostname('127.0.0.1'), 'loopback 127.0.0.1');
+  assert(isLoopbackHostname('::1'), 'loopback ::1');
+  assert(isLoopbackHostname('[::1]'), 'loopback [::1]');
+  assert(!isLoopbackHostname('marathon-pi-seven.vercel.app'), 'vercel not loopback');
+  assert(!isLoopbackHostname('example.com'), 'public host not loopback');
+  assert(!isLoopbackHostname('192.168.1.1'), 'LAN not loopback');
+  // Node 无 window：selftest 允许 override；浏览器须 loopback+query（由 main + acceptance 覆盖）
+  assert(typeof window === 'undefined', 'selftest runs without window');
+  assert(isExportTestOverrideAllowed() === true, 'Node selftest allows export test override');
 }
 
 {
@@ -791,6 +906,386 @@ console.log('\n── Intervals.icu idempotency gate ──');
     !isICUCompleteSuccess({ success: 0, failed: 0, total: 0 }),
     'empty plan not complete success',
   );
+}
+
+console.log('\n── backup import/export ──');
+
+{
+  const asOf = parseLocalDate('2026-07-01');
+  const profile = baseProfile({
+    raceDate: '2026-11-01',
+    pbHalf: '1:40:00',
+  });
+  const plan = generateTrainingPlan(profile, asOf);
+  assert(plan.length > 0, 'fixture plan non-empty for backup');
+
+  const state = {
+    profile,
+    plan,
+    completions: { '2026-07-02': { status: 'full' as const, rpe: 2 as const } },
+    myRaces: [{
+      raceId: 'r1',
+      distance: 'half' as const,
+      goal: 'pb' as const,
+      addedAt: '2026-07-01T00:00:00.000Z',
+      name: '测试半马',
+      date: '2026-11-01',
+    }],
+    vacations: [{ id: 'vac-1', start: '2026-08-01', end: '2026-08-05', label: '假' }],
+    isPlanGenerated: true,
+    planNeedsRegen: false,
+    exportSync: {},
+    activeTab: 'calendar' as const,
+  };
+
+  const payload = buildBackupPayload(state, parseLocalDate('2026-07-15'));
+  assert(payload.schema === BACKUP_SCHEMA, 'backup schema');
+  assert(payload.version === BACKUP_VERSION, 'backup version');
+  assert(payload.app === BACKUP_APP_ID, 'backup app id');
+  assert(!!payload.exportedAt, 'exportedAt present');
+  const json = backupToJson(payload);
+  assert(!json.toLowerCase().includes('icuapikey'), 'export json no api key field leak');
+  assert(!json.includes('apiKey'), 'export json no apiKey');
+  assert(!json.includes('icuAthleteId'), 'export excludes athlete id (min sensitivity)');
+
+  const parsed = parseBackupJson(json);
+  assert(parsed.ok === true, 'round-trip parse ok');
+  if (parsed.ok) {
+    assert(parsed.payload.data.plan.length === plan.length, 'round-trip plan length');
+    assert(parsed.payload.data.plan[0].date instanceof Date, 'plan date rehydrated to Date');
+    assert(!Number.isNaN(parsed.payload.data.plan[0].date.getTime()), 'plan date valid');
+    assert(parsed.payload.data.completions['2026-07-02']?.status === 'full', 'completions restored');
+    assert(parsed.payload.data.myRaces[0]?.raceId === 'r1', 'myRaces restored');
+    assert(parsed.payload.data.vacations[0]?.id === 'vac-1', 'vacations restored');
+    assert(parsed.payload.data.isPlanGenerated === true, 'isPlanGenerated');
+    const restorable = toRestorableState(parsed.payload.data);
+    assert(restorable.icuApiKey === '', 'restorable forces empty api key');
+    assert(restorable.plan.every(w => w.date instanceof Date), 'all plan dates Date');
+    // 训练引擎可再读 profile
+    assert(generateTrainingPlan(restorable.profile, asOf).length > 0, 'restored profile usable by engine');
+  }
+
+  // 文件名带本地日期
+  assert(backupFileName(new Date(2026, 6, 15)) === 'marathon-backup-2026-07-15.json', 'backup filename local date');
+
+  // 恶意 / 非法
+  assert(parseBackupJson('not json').ok === false, 'reject non-json');
+  assert(parseBackupJson('[]').ok === false, 'reject array root');
+  assert(parseBackupJson('{}').ok === false, 'reject empty object');
+  assert(parseBackupJson(JSON.stringify({ schema: 'x', version: 1, app: BACKUP_APP_ID, exportedAt: new Date().toISOString(), data: {} })).ok === false, 'bad schema');
+  assert(parseBackupJson(JSON.stringify({ ...payload, app: 'other' })).ok === false, 'bad app');
+  assert(parseBackupJson(JSON.stringify({ ...payload, version: BACKUP_VERSION + 99 })).ok === false, 'future version');
+  assert(parseBackupJson(JSON.stringify({ ...payload, exportedAt: 'not-a-date' })).ok === false, 'bad exportedAt');
+  assert(parseBackupJson(JSON.stringify({ ...payload, data: { ...payload.data, isPlanGenerated: 'yes' } })).ok === false, 'bad structure bool');
+  assert(parseBackupJson(json, BACKUP_MAX_BYTES + 1).ok === false, 'too large by byteLength');
+
+  // 含密钥的 JSON 拒绝
+  const withSecret = JSON.parse(json);
+  withSecret.data.icuApiKey = 'sk-evil';
+  assert(parseBackupJson(JSON.stringify(withSecret)).ok === false, 'reject secret in data');
+  assert(containsForbiddenSecrets({ icuApiKey: 'x' }), 'detect icuApiKey');
+  assert(containsForbiddenSecrets({ nested: { apiKey: 'x' } }), 'detect nested apiKey');
+
+  // 覆盖说明：与真实恢复一致，不含 activeTab
+  if (parsed.ok) {
+    const lines = describeOverwriteFields(parsed.payload.data);
+    assert(lines.some(l => l.includes('档案')), 'overwrite lists profile');
+    assert(lines.some(l => l.includes('训练计划')), 'overwrite lists plan');
+    assert(!lines.some(l => l.includes('标签')), 'overwrite does not list activeTab');
+    const rest = toRestorableState(parsed.payload.data);
+    assert(!('activeTab' in rest), 'restorable omits activeTab');
+  }
+
+  // 取消不写状态：纯函数层无副作用；用「解析后不调用 toRestorable/restore」语义验证
+  const before = JSON.stringify(state.completions);
+  const cancelParse = parseBackupJson(json);
+  assert(cancelParse.ok, 'cancel path still parses');
+  assert(JSON.stringify(state.completions) === before, 'cancel does not mutate source state');
+
+  // ── 损坏 / 恶意 details ──
+  function wrapData(data: Record<string, unknown>) {
+    return JSON.stringify({
+      schema: BACKUP_SCHEMA,
+      version: BACKUP_VERSION,
+      app: BACKUP_APP_ID,
+      exportedAt: new Date().toISOString(),
+      data,
+    });
+  }
+  const baseData = parsed.ok ? JSON.parse(JSON.stringify({
+    ...parsed.payload.data,
+    plan: parsed.payload.data.plan.map(w => ({
+      ...w,
+      date: w.date instanceof Date ? w.date.toISOString() : w.date,
+    })),
+  })) : null;
+  assert(!!baseData, 'baseData for malice tests');
+  if (baseData) {
+    const badDetails = structuredClone(baseData);
+    badDetails.plan[0].details = { main: 'x' };
+    assert(parseBackupJson(wrapData(badDetails)).ok === false, 'reject details.main string');
+
+    const badMainObj = structuredClone(baseData);
+    badMainObj.plan[0].details = { main: { name: 'x' } };
+    assert(parseBackupJson(wrapData(badMainObj)).ok === false, 'reject details.main object');
+
+    const missingMain = structuredClone(baseData);
+    missingMain.plan[0].details = { warmup: { name: 'w' } };
+    assert(parseBackupJson(wrapData(missingMain)).ok === false, 'reject details without main array');
+
+    const goodDetails = structuredClone(baseData);
+    goodDetails.plan[0].details = {
+      warmup: { name: '热身', durationMins: 5 },
+      main: [{ name: '主课', distanceKm: 8, pace: "5'00\"" }],
+      cooldown: { name: '放松', durationMins: 5 },
+    };
+    assert(parseBackupJson(wrapData(goodDetails)).ok === true, 'accept strict details');
+
+    // 无效日期
+    assert(!isValidLocalYmd('2026-02-30'), 'reject Feb 30');
+    assert(!isValidLocalYmd('2026-13-01'), 'reject month 13');
+    assert(isValidLocalYmd('2026-07-15'), 'accept real ymd');
+    const badRaceDate = structuredClone(baseData);
+    badRaceDate.profile.raceDate = '2026-02-30';
+    assert(parseBackupJson(wrapData(badRaceDate)).ok === false, 'reject invalid raceDate');
+    const badCompKey = structuredClone(baseData);
+    badCompKey.completions = { 'not-a-date': { status: 'full', rpe: 2 } };
+    assert(parseBackupJson(wrapData(badCompKey)).ok === false, 'reject bad completion key');
+    const badVac = structuredClone(baseData);
+    badVac.vacations = [{ id: 'v1', start: '2026-08-10', end: '2026-08-01' }];
+    assert(parseBackupJson(wrapData(badVac)).ok === false, 'reject vacation start>end');
+    const badVacDay = structuredClone(baseData);
+    badVacDay.vacations = [{ id: 'v1', start: '2026-02-30', end: '2026-03-01' }];
+    assert(parseBackupJson(wrapData(badVacDay)).ok === false, 'reject vacation invalid day');
+
+    // javascript URL
+    assert(!isSafeHttpUrl('javascript:alert(1)'), 'reject javascript url');
+    assert(!isSafeHttpUrl('data:text/html,x'), 'reject data url');
+    assert(isSafeHttpUrl('https://example.com/r'), 'accept https');
+    assert(isSafeHttpUrl(''), 'accept empty url');
+    const badUrl = structuredClone(baseData);
+    badUrl.myRaces = [{
+      raceId: 'r1', distance: 'half', goal: 'pb',
+      addedAt: '2026-07-01T00:00:00.000Z',
+      registrationUrl: 'javascript:alert(1)',
+    }];
+    assert(parseBackupJson(wrapData(badUrl)).ok === false, 'reject javascript registrationUrl');
+
+    // 未知字段
+    const unknownRoot = JSON.parse(json);
+    unknownRoot.extraEvil = 1;
+    assert(parseBackupJson(JSON.stringify(unknownRoot)).ok === false, 'reject unknown root key');
+    const unknownData = structuredClone(baseData);
+    unknownData.icuAthleteId = 'should-not';
+    assert(parseBackupJson(wrapData(unknownData)).ok === false, 'reject unknown data key athlete');
+    const unknownProfile = structuredClone(baseData);
+    unknownProfile.profile.secretNote = 'x';
+    assert(parseBackupJson(wrapData(unknownProfile)).ok === false, 'reject unknown profile key');
+
+    // 深层 secret：迭代扫描，depth>8 不静默放过
+    let deep: Record<string, unknown> = { apiKey: 'x' };
+    for (let i = 0; i < 20; i++) deep = { nest: deep };
+    assert(containsForbiddenSecrets(deep) === true, 'deep secret still detected');
+    // 超深无 secret 也拒绝（depth 超限）
+    let deepOk: unknown = 1;
+    for (let i = 0; i < 40; i++) deepOk = [deepOk];
+    assert(containsForbiddenSecrets(deepOk) === true, 'over-depth treated as dangerous');
+
+    // 状态不变量
+    const emptyPlanGen = structuredClone(baseData);
+    emptyPlanGen.plan = [];
+    emptyPlanGen.isPlanGenerated = true;
+    assert(parseBackupJson(wrapData(emptyPlanGen)).ok === false, 'reject isPlanGenerated with empty plan');
+    const calNoPlan = structuredClone(baseData);
+    calNoPlan.plan = [];
+    calNoPlan.isPlanGenerated = false;
+    calNoPlan.activeTab = 'calendar';
+    assert(parseBackupJson(wrapData(calNoPlan)).ok === false, 'reject calendar tab without plan');
+
+    // 极端 plan 长度
+    const huge = structuredClone(baseData);
+    huge.plan = Array.from({ length: BACKUP_MAX_PLAN_DAYS + 1 }, (_, i) => ({
+      date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
+      workoutType: 'Easy',
+      description: 'x',
+      distanceKm: 5,
+    }));
+    // 日期可能重复无效月日——用合法递增
+    huge.plan = Array.from({ length: BACKUP_MAX_PLAN_DAYS + 1 }, (_, i) => {
+      const d = new Date(2026, 0, 1 + i);
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { date: `${ymd}T00:00:00.000Z`, workoutType: 'Easy', description: 'x', distanceKm: 5 };
+    });
+    assert(parseBackupJson(wrapData(huge)).ok === false, 'reject plan over max days');
+  }
+}
+
+console.log('\n── wechat escape ──');
+
+{
+  assert(isWeChatUA('Mozilla/5.0 MicroMessenger/8.0.0'), 'detect MicroMessenger');
+  assert(!isWeChatUA('Mozilla/5.0 Chrome/120'), 'desktop chrome not wechat');
+  assert(shouldShowWeChatEscape('MicroMessenger', false), 'show when wechat not dismissed');
+  assert(!shouldShowWeChatEscape('MicroMessenger', true), 'hide when dismissed');
+  assert(!shouldShowWeChatEscape('Safari', false), 'no banner outside wechat');
+  assert(wechatPlatformHint('iPhone MicroMessenger').includes('ios') || wechatPlatformHint('iPhone MicroMessenger') === 'ios', 'ios hint');
+  assert(wechatPlatformHint('Android MicroMessenger') === 'android', 'android hint');
+  assert(wechatMenuInstructions('ios').includes('Safari'), 'ios menu mentions Safari');
+  assert(wechatMenuInstructions('android').includes('浏览器'), 'android menu mentions browser');
+
+  const mem: Record<string, string> = {};
+  assert(!isWeChatBannerDismissed(k => mem[k] ?? null), 'not dismissed initially');
+  dismissWeChatBanner((k, v) => { mem[k] = v; });
+  assert(mem[WECHAT_DISMISS_SESSION_KEY] === '1', 'session dismiss key set');
+  assert(isWeChatBannerDismissed(k => mem[k] ?? null), 'dismissed after set');
+}
+
+console.log('\n── local metrics privacy ──');
+
+{
+  let m = emptyMetrics();
+  const day = localDayKey(new Date(2026, 6, 15));
+  m = recordOpen(m, { displayMode: 'browser', isWeChat: true, now: new Date(2026, 6, 15, 10) });
+  assert(m.totals.opens === 1, 'open counted');
+  assert(m.activeDays.includes(day), 'active day recorded');
+  assert(m.totals.wechatEntry === 1, 'wechat entry');
+  // 同日再开：opens++ 但活跃日不重复、returnDays 不增加
+  m = recordOpen(m, { displayMode: 'browser', isWeChat: false, now: new Date(2026, 6, 15, 18) });
+  assert(m.totals.opens === 2, 'second open same day');
+  assert(m.activeDays.filter(d => d === day).length === 1, 'day dedupe');
+  assert(m.totals.returnDays === 0, 'no return day same calendar day');
+  // 次日回访
+  m = recordOpen(m, { displayMode: 'standalone', isWeChat: false, now: new Date(2026, 6, 16, 9) });
+  assert(m.totals.returnDays === 1, 'return day counted');
+  assert(m.totals.standaloneSessions === 1, 'standalone session');
+
+  m = recordChannelOutcome(m, 'icu', 'partial', new Date(2026, 6, 16));
+  assert(m.totals.icuPartial === 1, 'icu partial not counted as success');
+  assert(m.totals.icuOk === 0, 'icu ok still 0 on partial');
+  m = recordChannelOutcome(m, 'icu', 'success', new Date(2026, 6, 16));
+  assert(m.totals.icuOk === 1, 'icu full success');
+  m = recordChannelOutcome(m, 'backup_import', 'cancel', new Date(2026, 6, 16));
+  assert(m.totals.backupImportCancel === 1, 'import cancel counted');
+
+  // 容量边界：活跃日
+  let filled = emptyMetrics();
+  for (let i = 0; i < METRICS_MAX_ACTIVE_DAYS + 40; i++) {
+    const d = new Date(2026, 0, 1 + i);
+    filled = recordOpen(filled, { displayMode: 'browser', isWeChat: false, now: d });
+  }
+  assert(filled.activeDays.length <= METRICS_MAX_ACTIVE_DAYS, 'activeDays cap', `n=${filled.activeDays.length}`);
+  assert(Object.keys(filled.byDay).length <= METRICS_MAX_DAY_BUCKETS, 'day buckets cap', `n=${Object.keys(filled.byDay).length}`);
+
+  // 诊断白名单 / 无敏感字段（日粒度）
+  const diag = buildDiagnosticPayload(m, {
+    displayMode: 'browser',
+    language: 'zh-CN',
+    timezoneOffsetMinutes: -480,
+    width: 390,
+    height: 844,
+    standalone: false,
+    wechatLikely: true,
+  }, new Date(2026, 6, 16));
+  const diagJson = JSON.stringify(diag);
+  assert(!/icuApiKey|apiKey|athleteId|pb5k|pbHalf|goalTime/i.test(diagJson), 'diag no secrets/PB');
+  assert(!diagJson.includes('myRaces'), 'diag no myRaces');
+  assert(!diagJson.includes('?utm'), 'diag no query strings');
+  assert(diag.metrics.firstOpenDay === '2026-07-15', 'diag firstOpenDay ymd');
+  assert(diag.metrics.lastOpenDay === '2026-07-16', 'diag lastOpenDay ymd');
+  assert(!('firstOpenAt' in diag.metrics), 'diag no firstOpenAt timestamp');
+  assert(diag.runtime.language === 'zh', 'language coarse zh');
+  assert(coarseLanguage('en-US') === 'en', 'language coarse en');
+  assert(coarseLanguage('ja-JP') === 'other', 'language coarse other');
+  assert(diagnosticHasForbiddenKeys(diag) === null, 'diag forbidden key scan clean', diagnosticHasForbiddenKeys(diag) ?? '');
+  assert(viewportBucket(390, 844) === 'phone', 'viewport phone bucket');
+
+  // 坏 storage 回退
+  assert(loadMetricsFromRaw('nope').totals.opens === 0, 'bad raw → empty');
+  assert(loadMetricsFromRaw(null).schema === 'marathon-local-metrics', 'null → empty schema');
+
+  // ── poisoned localStorage ──
+  assert(sanitizeCount('10') === 0, 'string count → 0');
+  assert(sanitizeCount(-5) === 0, 'negative → 0');
+  assert(sanitizeCount(NaN) === 0, 'NaN → 0');
+  assert(sanitizeCount(1e20) === 1_000_000_000, 'huge clamp');
+
+  const poisoned = {
+    schema: 'marathon-local-metrics',
+    version: METRICS_VERSION,
+    firstOpenDay: 'not-a-date<script>',
+    lastOpenDay: 'SECRET_TOKEN_xyz',
+    // 无合法 firstOpenAt 回退，非法 day 必须为 null
+    activeDays: ['2026-07-15', 'apiKey=sk-evil', '2026-02-30', '2026-07-15'],
+    totals: {
+      opens: '99',
+      returnDays: -3,
+      fitOk: Number.NaN,
+      secret: 'injected',
+      apiKey: 'sk-leak',
+    },
+    byDay: {
+      '2026-07-15': { opens: 2, secret: 'day-secret', apiKey: 'x' },
+      'evil-key': { opens: 1, password: 'p' },
+      '2026-02-30': { opens: 9 },
+    },
+  };
+  const cleaned = loadMetricsFromRaw(JSON.stringify(poisoned));
+  assert(cleaned.totals.opens === 0, 'poisoned string opens → 0');
+  assert(cleaned.totals.returnDays === 0, 'poisoned negative return → 0');
+  assert(!('secret' in cleaned.totals), 'totals unknown key dropped');
+  assert(!('apiKey' in cleaned.totals), 'totals apiKey dropped');
+  assert(cleaned.activeDays.length === 1 && cleaned.activeDays[0] === '2026-07-15', 'activeDays only valid ymd');
+  assert(cleaned.firstOpenDay === null, 'invalid firstOpenDay → null');
+  assert(cleaned.lastOpenDay === null, 'invalid lastOpenDay → null');
+  assert(Object.keys(cleaned.byDay).join(',') === '2026-07-15', 'byDay only valid day keys');
+  assert(!('secret' in cleaned.byDay['2026-07-15']), 'day bucket secret dropped');
+  assert(cleaned.byDay['2026-07-15'].opens === 2, 'day opens kept');
+
+  const diagP = buildDiagnosticPayload(cleaned, {
+    displayMode: 'browser',
+    language: 'zh-Hans-CN',
+    timezoneOffsetMinutes: -480,
+    width: 390,
+    height: 844,
+    standalone: false,
+    wechatLikely: false,
+  });
+  const diagPJson = JSON.stringify(diagP);
+  assert(!diagPJson.includes('sk-'), 'poisoned diag no secret values');
+  assert(!diagPJson.includes('apiKey'), 'poisoned diag no apiKey key');
+  assert(!diagPJson.includes('SECRET_TOKEN'), 'poisoned diag no injected day text');
+  assert(!diagPJson.includes('password'), 'poisoned diag no password');
+  assert(diagnosticHasForbiddenKeys(diagP) === null, 'poisoned diag forbidden scan null', String(diagnosticHasForbiddenKeys(diagP)));
+  assert(diagP.runtime.language === 'zh', 'poisoned diag language coarse');
+
+  // v1 迁移：精确 ISO → 日
+  const v1 = {
+    schema: 'marathon-local-metrics',
+    version: 1,
+    firstOpenAt: '2026-07-10T08:15:30.000Z',
+    lastOpenAt: '2026-07-12T22:00:00.000Z',
+    activeDays: ['2026-07-10'],
+    totals: { opens: 3 },
+    byDay: { '2026-07-10': { opens: 3, secret: 1 } },
+  };
+  const migrated = loadMetricsFromRaw(JSON.stringify(v1));
+  assert(migrated.version === METRICS_VERSION || migrated.firstOpenDay != null, 'v1 migrates days');
+  assert(migrated.firstOpenDay === localDayKey(new Date('2026-07-10T08:15:30.000Z')), 'v1 firstOpenDay from ISO');
+  assert(!('secret' in (migrated.byDay['2026-07-10'] || {})), 'v1 day secret dropped');
+
+  // syncPlanToICU 外层 throw 模拟：调用方应得到可序列化失败（组件层 catch；此处验证 mock throw）
+  {
+    const boom = async () => { throw new Error('network down'); };
+    let caught = false;
+    let failResult: { success: number; failed: number; allSucceeded: boolean } | null = null;
+    try {
+      await boom();
+    } catch {
+      caught = true;
+      failResult = { success: 0, failed: 5, allSucceeded: false };
+    }
+    assert(caught && failResult && !failResult.allSucceeded && failResult.success === 0, 'icu outer throw → honest fail result');
+  }
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

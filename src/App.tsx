@@ -3,9 +3,18 @@ import { ProfileForm } from './components/ProfileForm';
 import { TrainingStats } from './components/TrainingStats';
 import { CalendarView } from './components/CalendarView';
 import { RaceTab } from './components/RaceTab';
+import { WeChatEscapeBanner } from './components/WeChatEscapeBanner';
 import { Activity, CalendarDays, User, Flag } from 'lucide-react';
 import { useStore } from './store/useStore';
 import { cn } from './utils/cn';
+import {
+  detectDisplayMode,
+  mutateMetrics,
+  recordAppInstalled,
+  recordBeforeInstallPrompt,
+  recordOpen,
+} from './utils/local-metrics';
+import { isWeChatUA } from './utils/wechat';
 
 function App() {
   const { activeTab, setActiveTab, isPlanGenerated } = useStore();
@@ -20,6 +29,30 @@ function App() {
     const t = setTimeout(() => setToast(''), 2200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // 本机会话指标：打开、display-mode、微信入口、安装事件（不上传）
+  useEffect(() => {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    mutateMetrics(s =>
+      recordOpen(s, {
+        displayMode: detectDisplayMode(),
+        isWeChat: isWeChatUA(ua),
+      }),
+    );
+
+    const onBip = () => {
+      mutateMetrics(s => recordBeforeInstallPrompt(s));
+    };
+    const onInstalled = () => {
+      mutateMetrics(s => recordAppInstalled(s));
+    };
+    window.addEventListener('beforeinstallprompt', onBip);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBip);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-label)] pb-24">
@@ -45,6 +78,7 @@ function App() {
 
       {/* Content */}
       <main className="max-w-lg mx-auto px-4 pt-5">
+        <WeChatEscapeBanner />
         {activeTab === 'profile'  && <ProfileForm />}
         {activeTab === 'stats'    && <TrainingStats />}
         {activeTab === 'calendar' && <CalendarView />}

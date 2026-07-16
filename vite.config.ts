@@ -10,8 +10,15 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Include public/races.json in service worker precache so it works offline
-      includeAssets: ['favicon.svg', 'races.json'],
+      // Include public assets in SW precache; PNG icons required for install
+      includeAssets: [
+        'favicon.svg',
+        'races.json',
+        'pwa-192x192.png',
+        'pwa-512x512.png',
+        'pwa-512x512-maskable.png',
+        'apple-touch-icon.png',
+      ],
       manifest: {
         name: '马拉松备赛 · AI 训练计划',
         short_name: '马拉松备赛',
@@ -25,10 +32,28 @@ export default defineConfig({
         lang: 'zh-CN',
         icons: [
           {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/pwa-512x512-maskable.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
             src: '/favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
-            purpose: 'any maskable',
+            purpose: 'any',
           },
         ],
       },

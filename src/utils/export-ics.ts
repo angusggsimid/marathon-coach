@@ -1,5 +1,6 @@
 import type { DailyWorkout } from './training-engine';
 import { format } from 'date-fns';
+import { isExportTestOverrideAllowed } from './export-test-gate';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -114,7 +115,17 @@ export function generateICS(plan: DailyWorkout[], calName = '马拉松训练计�
   return out.join('\r\n');
 }
 
-export function downloadICS(plan: DailyWorkout[], filename = '马拉松训练计划.ics'): void {
+export type IcsDownloadImpl = (plan: DailyWorkout[], filename?: string) => void;
+
+/** 测试/验收注入：覆盖默认 ICS 下载；传 null 清除。生产域名下 no-op。 */
+let icsDownloadOverride: IcsDownloadImpl | null = null;
+
+export function setIcsDownloadOverrideForTest(impl: IcsDownloadImpl | null): void {
+  if (!isExportTestOverrideAllowed()) return;
+  icsDownloadOverride = impl;
+}
+
+function downloadICSDefault(plan: DailyWorkout[], filename = '马拉松训练计划.ics'): void {
   const content = generateICS(plan);
   const blob = new Blob(['\uFEFF' + content], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -125,4 +136,10 @@ export function downloadICS(plan: DailyWorkout[], filename = '马拉松训练计
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export function downloadICS(plan: DailyWorkout[], filename = '马拉松训练计划.ics'): void {
+  const gatedOverride = isExportTestOverrideAllowed() ? icsDownloadOverride : null;
+  const impl = gatedOverride ?? downloadICSDefault;
+  impl(plan, filename);
 }

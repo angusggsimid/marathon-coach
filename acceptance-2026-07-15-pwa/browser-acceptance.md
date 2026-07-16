@@ -1,0 +1,113 @@
+# PWA Foundation Browser Acceptance
+
+- base: http://127.0.0.1:4173
+- at: 2026-07-16T00:52:10.593Z
+- OK 104 / WARN 0 / FAIL 0
+- consoleErrors 0
+- pageErrors 0
+
+## Findings
+- **OK** base http://127.0.0.1:4173
+- **OK** static /manifest.webmanifest → 200
+- **OK** static /pwa-192x192.png → 200
+- **OK** static /pwa-512x512.png → 200
+- **OK** static /pwa-512x512-maskable.png → 200
+- **OK** static /apple-touch-icon.png → 200
+- **OK** static /favicon.svg → 200
+- **OK** manifest has 3 png icons
+- **OK** manifest has maskable purpose
+- **OK** icon brand /pwa-192x192.png 192x192 green rgb(50,215,75)
+- **OK** icon brand /pwa-512x512.png 512x512 green rgb(50,215,75)
+- **OK** icon brand /apple-touch-icon.png 180x180 green rgb(50,215,75)
+- **OK** icon brand /pwa-512x512-maskable.png 512x512 green rgb(50,215,75)
+- **OK** favicon.svg brand green + runner path
+- **OK** export-hooks-plain: plain page has no __MARATHON_EXPORT_TEST__
+- **OK** desktop-1280: bottom nav present y=722
+- **OK** desktop-1280: no wechat banner in normal browser
+- **OK** desktop-1280: data-backup-card visible
+- **OK** desktop-1280: backup export filename marathon-backup-2026-07-16.json
+- **OK** desktop-1280: backup payload schema ok
+- **OK** desktop-1280: backup no api key
+- **OK** desktop-1280: diagnostic schema
+- **OK** desktop-1280: diagnostic privacy clean
+- **OK** desktop-1280: backup reject bad json feedback
+- **OK** desktop-1280: reject damaged details
+- **OK** desktop-1280: restore confirm dialog
+- **OK** desktop-1280: confirm fields omit activeTab
+- **OK** desktop-1280: cancel did not write state
+- **OK** desktop-1280: restore wrote completions
+- **OK** desktop-1280: persist storage has no icuApiKey field
+- **OK** desktop-1280: restore stays on profile tab
+- **OK** desktop-1280: athlete id preserved locally
+- **OK** desktop-1280: restore success feedback visible
+- **OK** desktop-1280: calendar open after restore, details text present
+- **OK** mobile-390: bottom nav present y=766
+- **OK** mobile-390: no wechat banner in normal browser
+- **OK** mobile-390: data-backup-card visible
+- **OK** mobile-390: backup export filename marathon-backup-2026-07-16.json
+- **OK** mobile-390: backup payload schema ok
+- **OK** mobile-390: backup no api key
+- **OK** mobile-390: diagnostic schema
+- **OK** mobile-390: diagnostic privacy clean
+- **OK** mobile-390: backup reject bad json feedback
+- **OK** mobile-390: reject damaged details
+- **OK** mobile-390: restore confirm dialog
+- **OK** mobile-390: confirm fields omit activeTab
+- **OK** mobile-390: cancel did not write state
+- **OK** mobile-390: restore wrote completions
+- **OK** mobile-390: persist storage has no icuApiKey field
+- **OK** mobile-390: restore stays on profile tab
+- **OK** mobile-390: athlete id preserved locally
+- **OK** mobile-390: restore success feedback visible
+- **OK** mobile-390: calendar open after restore, details text present
+- **OK** mobile-wechat-390: bottom nav present y=766
+- **OK** mobile-wechat-390: wechat banner visible
+- **OK** mobile-wechat-390: wechat banner text ok
+- **OK** mobile-wechat-390: wechat banner above bottom nav
+- **OK** mobile-wechat-390: data-backup-card visible
+- **OK** mobile-wechat-390: backup export filename marathon-backup-2026-07-16.json
+- **OK** mobile-wechat-390: backup payload schema ok
+- **OK** mobile-wechat-390: backup no api key
+- **OK** mobile-wechat-390: diagnostic schema
+- **OK** mobile-wechat-390: diagnostic privacy clean
+- **OK** mobile-wechat-390: backup reject bad json feedback
+- **OK** mobile-wechat-390: reject damaged details
+- **OK** mobile-wechat-390: restore confirm dialog
+- **OK** mobile-wechat-390: confirm fields omit activeTab
+- **OK** mobile-wechat-390: cancel did not write state
+- **OK** mobile-wechat-390: restore wrote completions
+- **OK** mobile-wechat-390: persist storage has no icuApiKey field
+- **OK** mobile-wechat-390: restore stays on profile tab
+- **OK** mobile-wechat-390: athlete id preserved locally
+- **OK** mobile-wechat-390: restore success feedback visible
+- **OK** mobile-wechat-390: calendar open after restore, details text present
+- **OK** mobile-wechat-390: wechat dismiss hides banner
+- **OK** desktop-wechat: bottom nav present y=722
+- **OK** desktop-wechat: wechat banner visible
+- **OK** desktop-wechat: wechat banner text ok
+- **OK** desktop-wechat: wechat banner above bottom nav
+- **OK** desktop-wechat: data-backup-card visible
+- **OK** desktop-wechat: backup export filename marathon-backup-2026-07-16.json
+- **OK** desktop-wechat: backup payload schema ok
+- **OK** desktop-wechat: backup no api key
+- **OK** desktop-wechat: diagnostic schema
+- **OK** desktop-wechat: diagnostic privacy clean
+- **OK** desktop-wechat: backup reject bad json feedback
+- **OK** desktop-wechat: reject damaged details
+- **OK** desktop-wechat: restore confirm dialog
+- **OK** desktop-wechat: confirm fields omit activeTab
+- **OK** desktop-wechat: cancel did not write state
+- **OK** desktop-wechat: restore wrote completions
+- **OK** desktop-wechat: persist storage has no icuApiKey field
+- **OK** desktop-wechat: restore stays on profile tab
+- **OK** desktop-wechat: athlete id preserved locally
+- **OK** desktop-wechat: restore success feedback visible
+- **OK** desktop-wechat: calendar open after restore, details text present
+- **OK** desktop-wechat: wechat dismiss hides banner
+- **OK** export-sheet-errors: export test hooks present on acceptance URL
+- **OK** export-sheet-errors: FIT fail shows sheet error: 导出失败，请重试
+- **OK** export-sheet-errors: FIT error cleared on back to menu
+- **OK** export-sheet-errors: ICS fail shows sheet error: 日历导出失败，请重试
+- **OK** export-sheet-errors: ICS error cleared when open FIT range
+- **OK** export-sheet-errors: no residual error after close+reopen
+- **OK** export-sheet-errors: FIT retry success closes sheet, clears error
