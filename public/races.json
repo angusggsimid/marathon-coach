@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T05:36:43.778Z",
+  "generatedAt": "2026-07-24T05:32:41.187Z",
   "races": [
     {
       "id": "zc-90772",
@@ -133,45 +133,6 @@
       "registrationUrl": "https://zuicool.com/event/12916508",
       "_source": "zuicool-events",
       "_sourceId": "12916508",
-      "sources": [
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-4866321",
-      "name": "2025济宁马拉松",
-      "date": "2025-04-06",
-      "city": "济宁",
-      "province": "山东",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://zuicool.com/event/4866321",
-      "_source": "zuicool-events",
-      "_sourceId": "4866321",
-      "sources": [
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-28825",
-      "name": "2025沧州大运河半程马拉松赛暨沧州市第十一届半程马拉松赛",
-      "date": "2025-04-06",
-      "city": "沧州",
-      "province": "河北",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://zuicool.com/event/28825",
-      "_source": "zuicool-events",
-      "_sourceId": "28825",
       "sources": [
         "zuicool"
       ]
@@ -15033,25 +14994,6 @@
       ]
     },
     {
-      "id": "nr-329",
-      "name": "2026三江半程马拉松",
-      "date": "2026-04-12",
-      "city": "柳州",
-      "province": "广西",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/329",
-      "_source": "nowrun",
-      "_sourceId": "329",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-330",
       "name": "2026黄姚古镇马拉松",
       "date": "2026-04-12",
@@ -15067,6 +15009,25 @@
       "registrationUrl": "https://www.nowrun.cn/race/330",
       "_source": "nowrun",
       "_sourceId": "330",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-329",
+      "name": "2026三江半程马拉松",
+      "date": "2026-04-12",
+      "city": "柳州",
+      "province": "广西",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/329",
+      "_source": "nowrun",
+      "_sourceId": "329",
       "sources": [
         "nowrun"
       ]
@@ -18342,6 +18303,26 @@
       ]
     },
     {
+      "id": "zc-29487",
+      "name": "2026鹤庆半程马拉松",
+      "date": "2026-08-16",
+      "city": "大理",
+      "province": "云南",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/29487",
+      "_source": "zuicool",
+      "_sourceId": "29487",
+      "sources": [
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-93028",
       "name": "2026吉木萨尔天山马拉松",
       "date": "2026-08-16",
@@ -18357,26 +18338,6 @@
       "registrationUrl": "https://reg.zuicool.com/93028",
       "_source": "zuicool",
       "_sourceId": "93028",
-      "sources": [
-        "nowrun",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-29487",
-      "name": "2026鹤庆半程马拉松",
-      "date": "2026-08-16",
-      "city": "大理",
-      "province": "云南",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/29487",
-      "_source": "zuicool",
-      "_sourceId": "29487",
       "sources": [
         "nowrun",
         "zuicool"
@@ -19586,7 +19547,7 @@
       ],
       "terrain": "flat",
       "label": null,
-      "status": "upcoming",
+      "status": "open",
       "registrationUrl": "https://zuicool.com/event/80036",
       "_source": "zuicool-events",
       "_sourceId": "80036",
@@ -21182,25 +21143,6 @@
       ]
     },
     {
-      "id": "nr-194",
-      "name": "2026泰宁半程马拉松",
-      "date": "2026-10-25",
-      "city": "三明",
-      "province": "福建",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.nowrun.cn/race/194",
-      "_source": "nowrun",
-      "_sourceId": "194",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-389",
       "name": "2026成都马拉松",
       "date": "2026-10-25",
@@ -21216,6 +21158,25 @@
       "registrationUrl": "http://chengdumarathon.cn/",
       "_source": "nowrun",
       "_sourceId": "389",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-194",
+      "name": "2026泰宁半程马拉松",
+      "date": "2026-10-25",
+      "city": "三明",
+      "province": "福建",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://www.nowrun.cn/race/194",
+      "_source": "nowrun",
+      "_sourceId": "194",
       "sources": [
         "nowrun"
       ]
@@ -21358,26 +21319,6 @@
       ]
     },
     {
-      "id": "zc-15792",
-      "name": "2026年JTBC首尔马拉松",
-      "date": "2026-11-01",
-      "city": "首尔",
-      "province": "韩国",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/15792",
-      "_source": "zuicool",
-      "_sourceId": "15792",
-      "sources": [
-        "zuicool"
-      ]
-    },
-    {
       "id": "zc-58451",
       "name": "华特磁电杯·2026临朐半程马拉松",
       "date": "2026-11-01",
@@ -21436,6 +21377,26 @@
       "_sourceId": "71275",
       "sources": [
         "marathonbm",
+        "zuicool"
+      ]
+    },
+    {
+      "id": "zc-15792",
+      "name": "2026年JTBC首尔马拉松",
+      "date": "2026-11-01",
+      "city": "首尔",
+      "province": "韩国",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/15792",
+      "_source": "zuicool",
+      "_sourceId": "15792",
+      "sources": [
         "zuicool"
       ]
     },
