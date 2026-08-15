@@ -46,3 +46,11 @@ acceptance-*/scrape-full.log
 
 # Local temp / service noise
 *.tsbuildinfo
+
+# Tencent Cloud EdgeOne
+.env
+.edgeone/*
+.tef_dist/*
+
+# Local health-check logs
+logs/

@@ -6,8 +6,11 @@
 
 ## 线上地址
 
-- 生产：https://marathon-pi-seven.vercel.app
+- 生产（Vercel）：https://marathon-pi-seven.vercel.app
+- 生产（腾讯云 EdgeOne）：https://marathon-gzgm45fm.edgeone.cool
 - 仓库：https://github.com/angusggsimid/marathon
+
+两个生产环境都关联了 GitHub `main` 分支，每次 push 自动部署。
 
 ## 用户可见能力（摘要）
 

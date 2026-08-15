@@ -69,7 +69,7 @@ Marathon/
 │
 ├── public/
 │   ├── favicon.svg                # App 图标（紫色闪电，用于 PWA）
-│   └── races.json                 # 爬虫产出的赛事数据（每周自动刷新）
+│   └── races.json                 # 爬虫产出的赛事数据（每天自动刷新）
 │
 ├── crawler/                       # 独立子项目：赛事数据爬虫
 │   └── src/
@@ -81,7 +81,7 @@ Marathon/
 │       └── types.ts               # 共享类型
 │
 ├── .github/workflows/
-│   └── crawl.yml                  # 每周一自动跑爬虫，更新 public/races.json
+│   └── crawl.yml                  # 每天 10:17（北京）自动跑爬虫，更新 public/races.json
 │
 ├── cloudflare-worker.js           # intervals.icu CORS 代理（需手动部署到 CF Workers）
 ├── vercel.json                    # Vercel 路由配置（SPA fallback + API 重写）
@@ -290,12 +290,15 @@ FIT 文件编码实现了完整的 ANT+ FIT Protocol v2.0 规范（包括 CRC-16
 ```
 GitHub Repo (mono-repo)
 │
-├── 前端 → Vercel 自动部署
+├── 前端 → Vercel 自动部署（生产：marathon-pi-seven.vercel.app）
 │     每次 push main 触发，约1分钟上线
 │
+├── 前端 → EdgeOne Makers 自动部署（生产：marathon-gzgm45fm.edgeone.cool）
+│     GitHub 集成，与 Vercel 并行；无 /api/data 重写，前端优先读 /races.json
+│
 ├── 赛事数据 → GitHub Actions 定时刷新
-│     每周一 10:00 (北京时间)
-│     爬虫运行 → public/races.json 更新 → push → 触发 Vercel 重部署
+│     每天 10:17 (北京时间)
+│     爬虫运行 → public/races.json 更新 → push → 同时触发两端重部署
 │
 └── intervals.icu 代理 → Cloudflare Worker（可选）
       CORS 代理，无状态，免费额度充足
@@ -315,9 +318,9 @@ GitHub Repo (mono-repo)
 
 ### 近期（部署上线后）
 
-- [ ] **PWA 图标完善**：添加 `icon-192.png` 和 `icon-512.png`，Android 安装体验更完整
-- [ ] **分享功能**：生成训练计划截图卡片（`html2canvas` 或 `canvas` 原生实现），方便跑步群传播
-- [ ] **赛事数据来源扩展**：接入更多赛事平台（目前覆盖 zuicool.com + gusto.cn）
+- [x] **PWA 图标完善**（2026-07-15 完成）：`pwa-192/512/512-maskable.png` + `apple-touch-icon-180`，绿底黑跑者品牌
+- [x] **分享功能**（2026-06-03 完成）：备赛分享卡 + 复制/系统分享入口
+- [x] **赛事数据来源扩展**（2026-07 完成）：zuicool + nowrun + chinarun + marathonbm 四源，质量门槛 + 跨源标准化去重
 
 ### 中期
 

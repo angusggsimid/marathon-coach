@@ -7,14 +7,22 @@
 ## 整体架构
 
 ```
-你的电脑 (代码) → GitHub (代码仓库) → Vercel (自动部署网站)
-                                    ↑
-                    GitHub Actions 每周刷新赛事数据
+你的电脑 (代码) → GitHub (代码仓库) → Vercel (自动部署，海外主)
+                     │              → EdgeOne Makers (自动部署，腾讯云)
+                     ↑
+     GitHub Actions 每天 10:17 (北京) 刷新赛事数据
 
 另外：Cloudflare Worker (可选，用于 intervals.icu 同步功能)
 ```
 
-**最终结果：** 用户打开 `https://你的域名.vercel.app`，看到完整 App，手机可以"添加到主屏幕"。
+**生产地址：**
+
+| 平台 | 地址 | 自动部署 |
+|---|---|---|
+| Vercel | `https://marathon-pi-seven.vercel.app` | ✓ 每次 push |
+| EdgeOne Makers | `https://marathon-gzgm45fm.edgeone.cool` | ✓ 每次 push（GitHub 集成，分支 main） |
+
+每次 push 后两个平台都会自动构建，无需手动操作。注意 EdgeOne 没有 `/api/data` 重写（那是 `vercel.json` 的配置），但前端优先读 `/races.json`，两端数据一致。
 
 ---
 
@@ -97,9 +105,23 @@ Vercel 检测到 push 会自动重新部署，约 1 分钟后生效。
 
 ---
 
+## 第二部分 B：EdgeOne Makers（腾讯云）
+
+> 当前状态：已完成。项目已关联 GitHub 仓库 `angusggsimid/marathon` 的 `main` 分支，每次 push 自动构建部署，与 Vercel 并行。
+
+- 生产地址：`https://marathon-gzgm45fm.edgeone.cool`
+- 项目 ID：`makers-tpxcnymmrsth`（本地 `.edgeone/project.json` 已关联）
+- 构建配置：`npm install` → `npm run build` → 输出目录 `dist`，Node 22.11.0
+- 控制台：https://console.cloud.tencent.com/edgeone/makers
+
+CLI（验证部署状态用）：`~/.local/bin/edgeone`（登录态在 `~/.edgeone/`）。
+注意：该项目是 GitHub 集成类型，**不能**用 `edgeone makers deploy` 手动推送（该命令仅限"直接上传"类型项目）；更新一律走 git push。
+
+---
+
 ## 第三部分：赛事数据自动刷新（GitHub Actions）
 
-`.github/workflows/crawl.yml` 已配置好，每周一 10:00 自动运行爬虫并更新数据。
+`.github/workflows/crawl.yml` 已配置好，每天北京时间 10:17 自动运行爬虫并更新数据。
 
 **首次需要手动触发一次：**
 
@@ -109,7 +131,7 @@ Vercel 检测到 push 会自动重新部署，约 1 分钟后生效。
 4. 点击右侧 **"Run workflow"** → **"Run workflow"**（绿色按钮）
 5. 等待约 2-3 分钟，完成后 `public/races.json` 会自动更新并触发 Vercel 重新部署
 
-之后每周一自动运行，无需手动操作。
+之后每天自动运行，无需手动操作。数据提交会同时触发 Vercel 和 EdgeOne 重新部署。
 
 ---
 
