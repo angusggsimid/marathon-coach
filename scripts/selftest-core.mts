@@ -1288,5 +1288,161 @@ console.log('\n── local metrics privacy ──');
   }
 }
 
+console.log('\n── weekly-adaptation 2.3 双源合并 ──');
+{
+  const monday = startOfWeek(parseLocalDate('2026-07-06'), { weekStartsOn: 1 });
+  const plan: DailyWorkout[] = [];
+  for (let i = 0; i < 14; i++) {
+    const date = addDays(monday, i);
+    plan.push({
+      date,
+      workoutType: i % 7 === 3 ? 'Rest' : 'Easy',
+      description: 'Easy',
+      distanceKm: i % 7 === 3 ? 0 : 10,
+    });
+  }
+  const prevSunday = addDays(monday, 6);
+  const targetMondayKey = format(addDays(prevSunday, 1), 'yyyy-MM-dd');
+  const objective = (factor: 0.9 | 1.0 | 1.05) => ({
+    factor,
+    summary: `测试客观裁决 ${factor.toFixed(2)}`,
+    signals: [],
+  });
+
+  // 无打卡：主观 1.0；客观 0.9 → 合并 0.9（客观可在无打卡时生效）
+  const m1 = computeWeeklyAdaptation(plan, {}, prevSunday, objective(0.9), null);
+  assert(m1.factor === 0.9 && m1.adoptedSource === 'merged', 'objective 0.9 + 无打卡 → 0.9 merged', `factor=${m1.factor} src=${m1.adoptedSource}`);
+  assert(m1.subjectiveFactor === 1.0 && m1.objectiveFactor === 0.9, '双源元数据记录');
+
+  // 冲突取保守：主观 1.05 × 客观 0.9 → 0.9
+  const goodCompletions: Record<string, { status: 'full' | 'partial' | 'skip'; rpe: 0 | 1 | 2 | 3 | 4 }> = {};
+  for (let i = 0; i < 7; i++) {
+    const w = plan[i];
+    if (w.workoutType !== 'Rest') goodCompletions[format(addDays(monday, i), 'yyyy-MM-dd')] = { status: 'full', rpe: 1 };
+  }
+  const m2 = computeWeeklyAdaptation(plan, goodCompletions, prevSunday, objective(0.9), null);
+  assert(m2.factor === 0.9, '主观 1.05 × 客观 0.9 → 保守 0.9', `factor=${m2.factor} subjective=${m2.subjectiveFactor}`);
+
+  // 客观 1.05 × 主观 1.0 → min = 1.0（不激进加码）
+  const m3 = computeWeeklyAdaptation(plan, {}, prevSunday, objective(1.05), null);
+  assert(m3.factor === 1.0, '客观 1.05 + 主观 1.0 → 1.0', `factor=${m3.factor}`);
+
+  // override 优先：客观 0.9 但用户否决为 1.0
+  const m4 = computeWeeklyAdaptation(plan, {}, prevSunday, objective(0.9), { weekKey: targetMondayKey, factor: 1.0 });
+  assert(m4.factor === 1.0 && m4.adoptedSource === 'override', 'override 优先于客观', `factor=${m4.factor} src=${m4.adoptedSource}`);
+
+  // override 周 key 不匹配 → 忽略
+  const m5 = computeWeeklyAdaptation(plan, {}, prevSunday, objective(0.9), { weekKey: '2030-01-07', factor: 1.0 });
+  assert(m5.factor === 0.9 && m5.adoptedSource === 'merged', 'override 周不匹配被忽略', `factor=${m5.factor}`);
+
+  // 向后兼容：不传 objective → 纯主观
+  const m6 = computeWeeklyAdaptation(plan, {}, prevSunday);
+  assert(m6.factor === 1.0 && m6.adoptedSource === undefined, '无 objective 行为不变', `factor=${m6.factor}`);
+
+  // applyWeeklyAdaptation：客观 0.9 无打卡也缩放目标周
+  const asOf = addDays(monday, 9);
+  const adapted = applyWeeklyAdaptation(plan, {}, asOf, objective(0.9), null);
+  const wedW = adapted.find(w => toDateKey(w.date) === format(asOf, 'yyyy-MM-dd'));
+  assert(wedW?.distanceKm === 9, '客观裁决缩放目标周距离 -10%', `km=${wedW?.distanceKm}`);
+}
+
+console.log('\n── 任务 3/4：课级就绪门 + 周期层上限 ──');
+{
+  const { sessionReadiness, applySessionReadiness, isIntensityType } = await import('../src/utils/insights/readiness.ts');
+  const { cycleCaps } = await import('../src/utils/insights/cycle.ts');
+
+  // 任务 3：risk 裁决（HRV 连续低于基线 + 睡眠不足）
+  const tiredSnapshot = {
+    version: 1, source: 'test', builtAt: 'x',
+    fitness: { ltPaceSec: 278 },
+    activities: [],
+    dailyMetrics: [
+      { date: '2026-08-10', hrvMs: 75, hrvBaseline: 70, restingHr: 55, sleepMinutes: 450 },
+      { date: '2026-08-15', hrvMs: 60, hrvBaseline: 70, restingHr: 56, sleepMinutes: 450 },
+      { date: '2026-08-16', hrvMs: 58, hrvBaseline: 70, restingHr: 60, sleepMinutes: 330 },
+      { date: '2026-08-17', hrvMs: 57, hrvBaseline: 70, restingHr: 61, sleepMinutes: 320 },
+    ],
+    recovery: { pct: 35 },
+  } as never;
+  const rd = sessionReadiness(tiredSnapshot);
+  assert(rd.level === 'risk', 'HRV 低于基线 + 睡眠不足 + 恢复度低 → risk', `level=${rd.level}`);
+
+  const goodSnapshot = { ...tiredSnapshot, recovery: { pct: 90 }, dailyMetrics: tiredSnapshot.dailyMetrics.map((m: Record<string, unknown>) => ({ ...m, hrvMs: 78, sleepMinutes: 460, restingHr: 54 })) } as never;
+  assert(sessionReadiness(goodSnapshot).level === 'good', '恢复良好 → good');
+
+  // 降级：3 天内第一个强度课 → Easy
+  const monday = startOfWeek(parseLocalDate('2026-08-17'), { weekStartsOn: 1 });
+  const plan: DailyWorkout[] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(monday, i);
+    plan.push({
+      date,
+      workoutType: i === 2 ? 'Tempo' : 'Easy',
+      description: i === 2 ? '节奏跑' : '轻松跑',
+      distanceKm: i === 2 ? 8 : 6,
+      targetPace: i === 2 ? "4'26\"-4'50\"" : "5'30\"-6'15\"",
+    });
+  }
+  const profile = { pb5k: '', pb10k: '', pbHalf: '1:50:00', pbFull: '', lthr: '', ltPace: '4:38', raceDate: '2026-12-07', raceType: 'full', goalTime: '3:45:00', intensity: 'moderate', longRunDay: 0, height: 178, weight: 76 } as never;
+  const asOf = parseLocalDate('2026-08-17');
+  const gate = applySessionReadiness(plan, profile, rd, asOf, null);
+  const wed = gate.plan[2];
+  assert(gate.downgraded?.dateKey === '2026-08-19' && wed.workoutType === 'Easy', '强度课降级为 Easy', `type=${wed.workoutType}`);
+  assert(wed.description.includes('就绪降级'), '降级标签');
+  assert(wed.targetPace === "5'30\"-6'15\"", '降级后配速为 Z2 区间', `pace=${wed.targetPace}`);
+
+  // 否决：override 命中 → 不降级
+  const gate2 = applySessionReadiness(plan, profile, rd, asOf, '2026-08-19');
+  assert(gate2.downgraded === null && gate2.plan[2].workoutType === 'Tempo', '否决后保留强度课');
+
+  // good 状态 → 不降级
+  const gate3 = applySessionReadiness(plan, profile, sessionReadiness(goodSnapshot), asOf, null);
+  assert(gate3.downgraded === null, 'good 不降级');
+  assert(isIntensityType('TempoIntervals') && !isIntensityType('Easy'), '强度课型判定');
+
+  // 任务 4：解耦 >10% → cap 1.0
+  const highDecSnapshot = {
+    version: 1, source: 'test', builtAt: 'x',
+    fitness: { ltPaceSec: 278, vo2max: 48 },
+    activities: [
+      { date: '2026-08-10', type: 'run', distanceKm: 12, laps: mkDecoupledLaps(15) },
+      { date: '2026-08-13', type: 'run', distanceKm: 12, laps: mkDecoupledLaps(18) },
+    ],
+    dailyMetrics: [],
+  } as never;
+  function mkDecoupledLaps(driftPct: number) {
+    // 前半 HR 140，后半 HR 上升使 drift ≈ driftPct
+    const laps = [];
+    for (let i = 1; i <= 10; i++) {
+      laps.push({ index: i, distanceM: 1000, timeSec: 360, avgPaceSec: 360, avgHr: i <= 5 ? 140 : Math.round(140 * (1 + driftPct / 100)) });
+    }
+    return laps;
+  }
+  const caps = cycleCaps(highDecSnapshot, profile);
+  assert(caps.cap === 1.0 && caps.reasons.length > 0, '解耦 >10% → cap 1.0', `cap=${caps.cap} dec=${caps.decouplingAvg}`);
+
+  // VO2max 差异 >4 → 参照提示
+  const divSnapshot = { ...highDecSnapshot, activities: [], fitness: { ltPaceSec: 278, vo2max: 55 } } as never;
+  const caps2 = cycleCaps(divSnapshot, profile);
+  assert(caps2.vo2maxDivergence !== null, 'VO2max 55 vs VDOT≈45 → 差异提示', `div=${caps2.vo2maxDivergence?.diff}`);
+
+  // 合并进周自适应：主观 1.05 × 客观 1.05，但 cycle cap 1.0 → 封顶
+  const fullCompletions: Record<string, { status: 'full' | 'partial' | 'skip'; rpe: 0 | 1 | 2 | 3 | 4 }> = {};
+  for (let i = 0; i < 7; i++) {
+    if (plan[i].workoutType !== 'Rest') fullCompletions[format(addDays(monday, i), 'yyyy-MM-dd')] = { status: 'full', rpe: 1 };
+  }
+  const m = computeWeeklyAdaptation(plan, fullCompletions, addDays(monday, 6), { factor: 1.05, summary: 's', signals: [] }, null, caps);
+  assert(m.factor === 1.0 && (m.cycleReasons?.length ?? 0) > 0, '周期层封顶 1.0', `factor=${m.factor} reasons=${m.cycleReasons?.length}`);
+}
+
+console.log('\n── Garmin FIT 适配器 ──');
+{
+  const { parseFitFiles } = await import('../src/utils/insights/fit-adapter.ts');
+  // 无效缓冲 → 诚实降级（failed 计数、空快照），不抛异常
+  const bad = await parseFitFiles([{ name: 'bad.fit', buffer: new ArrayBuffer(16) }]);
+  assert(bad.snapshot.activities.length === 0 && bad.failed === 1, '无效 FIT → 空快照 + failed=1', `failed=${bad.failed}`);
+  assert(bad.snapshot.source === 'garmin-fit' && bad.snapshot.dailyMetrics.length === 0, 'garmin 源 + 无日指标（诚实降级）');
+}
+
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);
 process.exit(failed > 0 ? 1 : 0);

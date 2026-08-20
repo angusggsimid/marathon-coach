@@ -3,9 +3,23 @@ import { useStore } from '../store/useStore';
 import type { Vacation } from '../store/useStore';
 import { applyRaceOverlays } from '../utils/race-plan-overlay';
 import { applyWeeklyAdaptation } from '../utils/weekly-adaptation';
+import { applySessionReadiness, sessionReadiness } from '../utils/insights/readiness';
+import { cycleCaps } from '../utils/insights/cycle';
 import type { DailyWorkout } from '../utils/training-engine';
 import { normalizeWorkoutDate } from '../utils/training-engine';
 import { format } from 'date-fns';
+
+/** 2.3：客观裁决（store 层按同步时点计算）+ 用户否决，供自适应双源合并 */
+export function useAdaptationInputs() {
+  const objective = useStore(s => s.corosObjective);
+  const override = useStore(s => s.adaptationOverride);
+  const profile = useStore(s => s.profile);
+  const corosSnapshot = useStore(s => s.corosSnapshot);
+  return useMemo(
+    () => ({ objective, override, cycle: cycleCaps(corosSnapshot, profile) }),
+    [objective, override, corosSnapshot, profile],
+  );
+}
 
 /**
  * Race taper/recovery + vacation overlays（不含周自适应）。
@@ -35,10 +49,38 @@ export function useBasePlan() {
 export function useEffectivePlan() {
   const basePlan = useBasePlan();
   const completions = useStore(s => s.completions);
+  const profile = useStore(s => s.profile);
+  const corosSnapshot = useStore(s => s.corosSnapshot);
+  const sessionOverride = useStore(s => s.sessionOverride);
+  const { objective, override, cycle } = useAdaptationInputs();
   return useMemo(
-    () => applyWeeklyAdaptation(basePlan, completions),
-    [basePlan, completions],
+    () => {
+      const weeklyAdapted = applyWeeklyAdaptation(basePlan, completions, undefined, objective, override, cycle);
+      // 任务 3：课级就绪门（恢复不足时降级 3 天内第一个强度课）
+      const gate = applySessionReadiness(
+        weeklyAdapted,
+        profile,
+        sessionReadiness(corosSnapshot),
+        new Date(),
+        sessionOverride,
+      );
+      return gate.plan;
+    },
+    [basePlan, completions, profile, corosSnapshot, sessionOverride, objective, override, cycle],
   );
+}
+
+/** 任务 3：供 UI 展示课级降级信息（与 useEffectivePlan 同口径） */
+export function useSessionGate() {
+  const basePlan = useBasePlan();
+  const profile = useStore(s => s.profile);
+  const corosSnapshot = useStore(s => s.corosSnapshot);
+  const sessionOverride = useStore(s => s.sessionOverride);
+  return useMemo(() => {
+    const readiness = sessionReadiness(corosSnapshot);
+    const gate = applySessionReadiness(basePlan, profile, readiness, new Date(), sessionOverride);
+    return { readiness, downgraded: gate.downgraded, overridden: readiness.level === 'risk' && !gate.downgraded && sessionOverride !== null };
+  }, [basePlan, profile, corosSnapshot, sessionOverride]);
 }
 
 // ─── Vacation overlay ─────────────────────────────────────────────────────────

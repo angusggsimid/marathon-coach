@@ -17,24 +17,17 @@ export function TrainingStats() {
       {/* Page title */}
       <div className="pt-1 pb-1">
         <h1 className="text-[22px] font-bold text-white tracking-tight">训练配速与心率</h1>
-        <p className="text-[13px] text-[var(--color-label-2)] mt-0.5">基于 COROS EvoLab 6 区间模型（设备同步请走 Intervals.icu）</p>
+        <p className="text-[13px] text-[var(--color-label-2)] mt-0.5">基于 COROS EvoLab 6 区间模型；连接手表后区间优先用手表实测阈值</p>
       </div>
 
-      {/* Best-practice tip */}
+      {/* 使用提示（合并卡） */}
       <div className="bg-[var(--color-surface)] rounded-2xl p-4 flex items-start gap-3">
         <div className="w-[30px] h-[30px] rounded-full bg-[var(--color-blue)]/15 flex items-center justify-center flex-shrink-0 mt-0.5">
           <Info className="w-[15px] h-[15px] text-[var(--color-blue)]" />
         </div>
         <p className="text-[13px] text-[var(--color-label-2)] leading-relaxed">
-          <span className="text-white font-semibold">最佳实践：</span>
-          配速为主，心率为辅。心率容易受气温、疲劳等因素漂移，强度课请严格遵循配速锚点，Easy/LSD 跑请严格遵循心率上限。
-        </p>
-      </div>
-
-      <div className="bg-[var(--color-accent)]/8 border border-[var(--color-accent)]/18 rounded-2xl px-4 py-3">
-        <p className="text-[13px] text-[var(--color-label-2)] leading-relaxed">
-          <span className="text-[var(--color-accent)] font-semibold">看不懂也没关系：</span>
-          训练页每天会告诉你目标配速。你只要强度课按配速跑，轻松跑和长跑别超过心率上限即可。
+          <span className="text-white font-semibold">怎么用：</span>
+          配速为主，心率为辅。强度课按配速跑，轻松跑和长跑别超过心率上限。看不懂没关系——训练页每天会直接告诉你目标配速。
         </p>
       </div>
 

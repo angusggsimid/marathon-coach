@@ -65,7 +65,7 @@ npx tsc --noEmit
 
 ## 部署
 
-见 `DEPLOY.md`。推送 `main` 后 Vercel 自动构建部署。Intervals.icu 同步依赖可选的 Cloudflare Worker（`cloudflare-worker.js`），需单独在 Cloudflare 配置。
+见 `DEPLOY.md`。推送 `main` 后 Vercel 自动构建部署。Intervals.icu 同步为可选通道（当前未启用代理，浏览器直连可能受 CORS 限制）。
 
 中国大陆可达性探针方案（外部、**尚未执行拨测**；阈值标为试运行 SLO，待建基线；需用户后续选具备大陆运营商拨测的供应商）：`PWA_FOUNDATION_MEASUREMENT_2026-07-15.md`。
 

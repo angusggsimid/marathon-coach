@@ -54,3 +54,11 @@ acceptance-*/scrape-full.log
 
 # Local health-check logs
 logs/
+
+# COROS local data (privacy: never commit)
+local-data/
+
+# 本地快照副本（仅 dev 便利，永不提交）
+
+# Playwright 工件（含个人数据截图）
+.playwright-mcp/

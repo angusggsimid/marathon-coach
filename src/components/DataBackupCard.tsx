@@ -61,7 +61,8 @@ export function DataBackupCard() {
         isPlanGenerated,
         planNeedsRegen,
         exportSync,
-        activeTab,
+        // 备份 schema 只认四个基础 Tab；洞察是应用内状态，导出时回落 profile（恢复时本就不还原 activeTab）
+        activeTab: activeTab === 'insights' ? 'profile' : activeTab,
       });
       const json = backupToJson(payload);
       downloadBackupJson(json, backupFileName());
@@ -190,11 +191,11 @@ export function DataBackupCard() {
         />
       </div>
 
-      <div className="mt-4 pt-3 border-t border-[var(--color-separator)]">
-        <p className="text-[11px] font-semibold text-[var(--color-label-3)] uppercase tracking-wider flex items-center gap-1.5">
+      <details className="mt-4 pt-3 border-t border-[var(--color-separator)]">
+        <summary className="cursor-pointer list-none text-[11px] font-semibold text-[var(--color-label-3)] uppercase tracking-wider flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5" />
-          试用诊断
-        </p>
+          试用诊断（开发者用）
+        </summary>
         <p className="text-[11px] text-[var(--color-label-3)] mt-1 leading-relaxed">
           仅本机聚合计数（打开次数、导出成败等）。不含计划、成绩、赛事、密钥。导出后由你自行提供。
         </p>
@@ -207,7 +208,7 @@ export function DataBackupCard() {
           <FileJson className="w-3.5 h-3.5" />
           导出试用诊断 JSON
         </button>
-      </div>
+      </details>
 
       {phase.kind === 'confirm' && (
         <div

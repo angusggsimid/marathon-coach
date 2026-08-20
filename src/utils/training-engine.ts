@@ -280,12 +280,25 @@ export function calculatePaces(profile: UserProfile): {
   return {
     z1: `> ${formatPace(tPaceSec + 97)}`,
     z2: `${formatPace(tPaceSec + 52)}-${formatPace(tPaceSec + 97)}`,
-    z3: `${formatPace(tPaceSec + 22)}-${formatPace(tPaceSec + 51)}`,
+    z3: `${formatPace(tPaceSec + 13)}-${formatPace(tPaceSec + 51)}`,
     z4: `${formatPace(tPaceSec - 12)}-${formatPace(tPaceSec + 12)}`,  // ±12s — matches COROS EvoLab official spec
     z5: `${formatPace(tPaceSec - 30)}-${formatPace(tPaceSec - 13)}`,
     z6: `< ${formatPace(tPaceSec - 30)}`,
     isCustom: false
   };
+}
+
+/**
+ * 配速落区数值判定（单一事实源；COROS EvoLab 6 区间）。
+ * 区间边界与 calculatePaces 显示字符串严格一致；insights 复用此函数，禁止另写常量。
+ */
+export function paceToZoneSec(paceSec: number, ltSec: number): number {
+  if (paceSec > ltSec + 97) return 1;
+  if (paceSec > ltSec + 51) return 2;
+  if (paceSec > ltSec + 12) return 3;
+  if (paceSec >= ltSec - 12) return 4;
+  if (paceSec >= ltSec - 30) return 5;
+  return 6;
 }
 
 // COROS EvoLab 6-Zone HR Model

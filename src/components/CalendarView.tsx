@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { TrainingLog } from './TrainingLog';
 import { useStore, RPE_LABELS, RPE_COLORS } from '../store/useStore';
-import { useBasePlan, useEffectivePlan } from '../hooks/useEffectivePlan';
+import { useBasePlan, useEffectivePlan, useAdaptationInputs, useSessionGate } from '../hooks/useEffectivePlan';
 import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import type { CheckInMessage } from '../utils/checkin-messages';
@@ -144,10 +144,12 @@ export function CalendarView() {
     profile, completions, logCompletion, getWeeklyAdaptation,
     icuApiKey, icuAthleteId, saveICUCredentials, clearICUCredentials,
     vacations, addVacation, removeVacation, myRaces,
-    exportSync, markExportSuccess,
+    exportSync, markExportSuccess, setAdaptationOverride, setSessionOverride,
   } = useStore();
   const basePlan = useBasePlan();
   const plan = useEffectivePlan();
+  const { objective, override, cycle } = useAdaptationInputs();
+  const sessionGate = useSessionGate();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedWorkout, setSelectedWorkout] = useState<DailyWorkout | null>(null);
   const [checkInWorkout, setCheckInWorkout] = useState<DailyWorkout | null>(null);
@@ -190,8 +192,8 @@ export function CalendarView() {
   const currentPlanFp = useMemo(() => planFingerprint(plan), [plan]);
   // 同一 snapshot：basePlan 算系数，effectivePlan 供本周关键课距离
   const weekSnap = useMemo(
-    () => buildWeekSnapshot(basePlan, completions, new Date(), plan),
-    [basePlan, completions, plan],
+    () => buildWeekSnapshot(basePlan, completions, new Date(), plan, objective, override, cycle),
+    [basePlan, completions, plan, objective, override, cycle],
   );
   const fitOptions = useMemo(() => buildFitRangeOptions(plan), [plan]);
   const staleFit = isFitChannelStale(exportSync?.fit, plan);
@@ -1288,10 +1290,84 @@ export function CalendarView() {
                   <p>上一完整周：{weekSnap.prevWeekStart} ~ {weekSnap.prevWeekEnd}</p>
                   <p>打卡 {weekSnap.checkedCount}/{weekSnap.planWorkoutCount} · 完成率 {Math.round(weekSnap.completionRate * 100)}%</p>
                   <p>平均 RPE：{weekSnap.avgRpe.toFixed(1)}（{weekSnap.avgRpeLabel}）</p>
+                  {weekSnap.adoptedSource === 'merged' && weekSnap.objectiveFactor !== undefined && (
+                    <p>双源合并：客观 {weekSnap.objectiveFactor.toFixed(2)} × 打卡 {weekSnap.subjectiveFactor?.toFixed(2) ?? '—'} → 采用 {weekSnap.factor.toFixed(2)}</p>
+                  )}
+                  {weekSnap.cycleReasons?.map((r, i) => (
+                    <p key={i}>周期层封顶：{r}</p>
+                  ))}
                   <p>本周作用范围：{weekSnap.targetWeekStart} ~ {weekSnap.targetWeekEnd}</p>
                   <p className="opacity-80">{weekSnap.advice}</p>
                 </div>
               )}
+              {weekSnap.adoptedSource === 'merged' && (
+                <button
+                  type="button"
+                  onClick={() => setAdaptationOverride({ weekKey: weekSnap.targetWeekStart, factor: weekSnap.subjectiveFactor ?? 1 })}
+                  className="block mt-2 text-[11px] font-semibold opacity-90 underline-offset-2 hover:underline"
+                >
+                  否决客观裁决（本周仅按打卡 {weekSnap.subjectiveFactor?.toFixed(2) ?? '1.00'}）
+                </button>
+              )}
+              {weekSnap.adoptedSource === 'override' && (
+                <button
+                  type="button"
+                  onClick={() => setAdaptationOverride(null)}
+                  className="block mt-2 text-[11px] font-semibold opacity-90 underline-offset-2 hover:underline"
+                >
+                  恢复客观裁决
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* A2. 否决态：factor 回到 1 后证明卡隐藏，恢复入口独立存在 */}
+          {weekSnap.adoptedSource === 'override' && !weekSnap.showProofCard && (
+            <div className="rounded-2xl px-3 py-2.5 text-[12px] leading-relaxed bg-[var(--color-surface-2)] text-[var(--color-label-2)]">
+              <p>
+                本周客观裁决已被否决（采用 {weekSnap.factor.toFixed(2)}；客观原为 {weekSnap.objectiveFactor?.toFixed(2) ?? '—'}）。
+              </p>
+              <button
+                type="button"
+                onClick={() => setAdaptationOverride(null)}
+                className="mt-1.5 text-[11px] font-semibold text-[var(--color-accent)] underline-offset-2 hover:underline"
+              >
+                恢复客观裁决
+              </button>
+            </div>
+          )}
+
+          {/* A3. 课级就绪门（任务 3）：恢复不足 → 3 天内第一个强度课自动降级 */}
+          {sessionGate.downgraded && (
+            <div className="rounded-2xl px-3 py-2.5 text-[12px] leading-relaxed break-words min-w-0 text-[var(--color-orange)] bg-[var(--color-orange)]/10 border border-[var(--color-orange)]/25">
+              <p className="font-semibold">
+                课级就绪：{sessionGate.downgraded.dateKey.slice(5)} 的「{sessionGate.downgraded.originalType}」已自动降级为轻松跑
+              </p>
+              <p className="mt-1 opacity-95">{sessionGate.readiness.reasons.join('；')}。</p>
+              <button
+                type="button"
+                onClick={() => setSessionOverride(sessionGate.downgraded!.dateKey)}
+                className="mt-1.5 text-[11px] font-semibold underline-offset-2 hover:underline"
+              >
+                否决降级（按原强度课执行）
+              </button>
+            </div>
+          )}
+          {sessionGate.overridden && (
+            <div className="rounded-2xl px-3 py-2.5 text-[12px] leading-relaxed bg-[var(--color-surface-2)] text-[var(--color-label-2)]">
+              <p>课级就绪降级已被否决（恢复信号：{sessionGate.readiness.reasons.join('；') || '—'}）。</p>
+              <button
+                type="button"
+                onClick={() => setSessionOverride(null)}
+                className="mt-1.5 text-[11px] font-semibold text-[var(--color-accent)] underline-offset-2 hover:underline"
+              >
+                恢复自动降级
+              </button>
+            </div>
+          )}
+          {!sessionGate.downgraded && !sessionGate.overridden && sessionGate.readiness.level === 'risk' && (
+            <div className="rounded-2xl px-3 py-2.5 text-[12px] leading-relaxed bg-[var(--color-orange)]/10 text-[var(--color-orange)]">
+              <p>恢复信号偏弱：{sessionGate.readiness.reasons.join('；')}。3 天内无强度课，暂不需要降级。</p>
             </div>
           )}
 
@@ -1849,8 +1925,9 @@ function CalendarWorkoutPill({ type }: { type: string }) {
 
 function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Record<string, { status: string }> }) {
   const result = computeACWR(plan, completions);
+  const corosRatio = useStore(s => s.corosLoadRatio);
 
-  if (!result) {
+  if (!result && corosRatio === null) {
     return (
       <div className="bg-[var(--color-surface)] rounded-2xl p-4 mb-4 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-[var(--color-blue)]/15 flex items-center justify-center flex-shrink-0">
@@ -1858,13 +1935,15 @@ function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Re
         </div>
         <div>
           <p className="text-[13px] font-semibold text-white">急慢性负荷比 · 数据积累中</p>
-          <p className="text-[11px] text-[var(--color-label-3)] mt-0.5">完成至少 7 天训练记录后显示</p>
+          <p className="text-[11px] text-[var(--color-label-3)] mt-0.5">连接 COROS 或完成至少 7 天训练记录后显示</p>
         </div>
       </div>
     );
   }
 
-  const { acwr, acuteKm, chronicAvgKm } = result;
+  const acwr = corosRatio ?? result!.acwr;
+  const acuteKm = result?.acuteKm;
+  const chronicAvgKm = result?.chronicAvgKm;
   const zone = getACWRZone(acwr);
 
   // Zone bar: <0.8 blue | 0.8-1.3 green | 1.3-1.5 orange | >1.5 red
@@ -1891,18 +1970,22 @@ function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Re
       <div className="flex items-end justify-between mb-3">
         <div>
           <p className="text-[32px] font-bold font-mono leading-none" style={{ color: zone.color }}>{acwr.toFixed(2)}</p>
-          <p className="text-[11px] text-[var(--color-label-3)] mt-1">{zone.advice}</p>
+          <p className="text-[11px] text-[var(--color-label-3)] mt-1">
+            {corosRatio !== null ? '来自手表近 7 天负荷' : '来自打卡估算'} · {zone.advice}
+          </p>
         </div>
-        <div className="text-right space-y-1">
-          <div>
-            <p className="text-[9px] text-[var(--color-label-3)] uppercase tracking-wider">急性 7天</p>
-            <p className="text-[13px] font-mono font-semibold text-white">{acuteKm} km</p>
+        {acuteKm !== undefined && chronicAvgKm !== undefined && (
+          <div className="text-right space-y-1">
+            <div>
+              <p className="text-[9px] text-[var(--color-label-3)] uppercase tracking-wider">急性 7天</p>
+              <p className="text-[13px] font-mono font-semibold text-white">{acuteKm} km</p>
+            </div>
+            <div>
+              <p className="text-[9px] text-[var(--color-label-3)] uppercase tracking-wider">慢性 28天均值</p>
+              <p className="text-[13px] font-mono font-semibold text-white">{chronicAvgKm} km/周</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[9px] text-[var(--color-label-3)] uppercase tracking-wider">慢性 28天均值</p>
-            <p className="text-[13px] font-mono font-semibold text-white">{chronicAvgKm} km/周</p>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Horizontal zone bar */}

@@ -135,35 +135,11 @@ CLI（验证部署状态用）：`~/.local/bin/edgeone`（登录态在 `~/.edgeo
 
 ---
 
-## 第四部分：Cloudflare Worker（可选）
+## 第四部分：intervals.icu 同步（当前未启用）
 
-> 仅当你想使用 **intervals.icu 同步功能**时才需要配置。如果不用，跳过本部分。
-
-intervals.icu 的 API 不允许浏览器直接调用（CORS 限制），需要通过 Cloudflare Worker 代理。
-
-### 4-1. 注册 Cloudflare
-
-前往 https://www.cloudflare.com → Sign Up（免费账号即可）。
-
-### 4-2. 创建 Worker
-
-1. 登录后进入 **"Workers & Pages"** → **"Create application"** → **"Create Worker"**
-2. Worker 名称填：`marathon-icu-proxy`
-3. 点击 **"Deploy"**（先部署一个空的）
-4. 进入 Worker 详情页，点击 **"Edit code"**
-5. 清空左侧代码区，粘贴项目根目录的 `cloudflare-worker.js` 全部内容
-6. 点击右上角 **"Save and Deploy"**
-7. 复制 Worker URL（格式为 `https://marathon-icu-proxy.你的用户名.workers.dev`）
-
-### 4-3. 添加环境变量到 Vercel
-
-1. 打开 Vercel，进入项目 → **"Settings"** → **"Environment Variables"**
-2. 点击 **"Add New"**：
-   - Name: `VITE_ICU_PROXY`
-   - Value: `https://marathon-icu-proxy.你的用户名.workers.dev`
-   - 勾选所有环境（Production / Preview / Development）
-3. 点击 **"Save"**
-4. 重新部署一次（Vercel 项目主页 → **"Redeploy"**）
+> 2026-08-18 清理：Cloudflare Worker 代理（`cloudflare-worker.js`）从未部署且未使用，已移除。
+> intervals.icu 导出通道仍保留在应用内（可选），但因 CORS 限制浏览器直连可能失败；
+> 如将来需要，可从 git 历史恢复 worker 并按_intervals.icu 官方文档_自行部署代理。
 
 ---
 

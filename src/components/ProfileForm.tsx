@@ -49,7 +49,7 @@ function mmssToSec(val: string): number {
 }
 
 export function ProfileForm() {
-  const { profile, updateProfile, generatePlan, isPlanGenerated, planNeedsRegen, myRaces, setActiveTab } = useStore();
+  const { profile, updateProfile, generatePlan, isPlanGenerated, planNeedsRegen, myRaces, setActiveTab, corosSnapshot } = useStore();
   const [errors, setErrors]         = useState<Record<string, string>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -352,6 +352,13 @@ export function ProfileForm() {
               {predictions.full && <p>{predictions.full}</p>}
             </div>
           </div>
+        )}
+        {corosSnapshot?.fitness?.vo2max !== undefined && (
+          <p className="text-[11px] text-[var(--color-label-3)] mt-2 leading-relaxed">
+            手表实测 VO₂max {corosSnapshot.fitness.vo2max}
+            {corosSnapshot.fitness.predictions?.full ? ` · 手表预测全马 ${corosSnapshot.fitness.predictions.full}` : ''}
+            ，与成绩推算有差异时见「洞察」页说明。
+          </p>
         )}
       </Card>
 

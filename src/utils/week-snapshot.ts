@@ -16,7 +16,10 @@ import {
   toDateKey,
   type CompletionEntry,
   type RPELevel,
+  type ObjectiveAdaptation,
+  type AdaptationOverride,
 } from './weekly-adaptation';
+import type { CycleCaps } from './insights/cycle';
 
 export const RPE_TEXT: Record<RPELevel, string> = {
   0: '极轻松',
@@ -60,6 +63,12 @@ export interface WeekSnapshot {
   estimatedCompletedKm: number | null;
   factor: number;
   advice: string;
+  /** 2.3 双源合并元数据 */
+  subjectiveFactor?: number;
+  objectiveFactor?: number;
+  adoptedSource?: 'subjective' | 'merged' | 'override';
+  objectiveSummary?: string;
+  cycleReasons?: string[];
   /** 有至少一次打卡才算“有评估数据” */
   hasCheckins: boolean;
   /** 当前 asOf 是否落在目标周且 factor≠1 且有打卡（与 getActiveAdaptationMeta.active 一致） */
@@ -85,6 +94,9 @@ export function buildWeekSnapshot(
   completions: Record<string, CompletionEntry>,
   asOf: Date = new Date(),
   effectivePlan?: DailyWorkout[],
+  objective?: ObjectiveAdaptation | null,
+  override?: AdaptationOverride | null,
+  cycle?: CycleCaps | null,
 ): WeekSnapshot {
   const today = startOfDay(asOf);
   const asOfKey = format(today, 'yyyy-MM-dd');
@@ -99,8 +111,8 @@ export function buildWeekSnapshot(
   const targetWeekEnd = format(targetSunday, 'yyyy-MM-dd');
 
   // 系数/完成率：始终复用 weekly-adaptation，底表 = basePlan
-  const prev = computeWeeklyAdaptation(basePlan, completions, prevWeekSunday);
-  const meta = getActiveAdaptationMeta(basePlan, completions, today);
+  const prev = computeWeeklyAdaptation(basePlan, completions, prevWeekSunday, objective ?? null, override ?? null, cycle ?? null);
+  const meta = getActiveAdaptationMeta(basePlan, completions, today, objective ?? null, override ?? null, cycle ?? null);
 
   const prevWorkouts = filterRunnableInWeek(
     basePlan,
@@ -141,7 +153,11 @@ export function buildWeekSnapshot(
     targetWeekEnd,
   );
   const hasCheckins = prev.checkedCount > 0;
-  const showProofCard = meta.active && meta.factor !== 1 && hasCheckins;
+  // 2.3：客观裁决/否决生效时，即使无打卡也展示证明卡（透明展示双源合并）
+  const showProofCard =
+    meta.active &&
+    meta.factor !== 1 &&
+    (hasCheckins || prev.adoptedSource === 'merged' || prev.adoptedSource === 'override');
 
   const proof = showProofCard
     ? buildProofLines(meta.factor, prev, avgRpeLabel)
@@ -200,6 +216,11 @@ export function buildWeekSnapshot(
     estimatedCompletedKm,
     factor: meta.active ? meta.factor : hasCheckins ? prev.factor : 1,
     advice: prev.advice,
+    subjectiveFactor: prev.subjectiveFactor,
+    objectiveFactor: prev.objectiveFactor,
+    adoptedSource: prev.adoptedSource,
+    objectiveSummary: prev.objectiveSummary,
+    cycleReasons: prev.cycleReasons,
     hasCheckins,
     adaptationActive: meta.active,
     showProofCard,
@@ -257,7 +278,14 @@ function buildProofLines(
         : '本周训练距离保持不变';
 
   const ratePct = Math.round(prev.completionRate * 100);
-  const evidence = `上周打卡 ${prev.checkedCount}/${prev.totalWorkouts}，完成率 ${ratePct}%，平均体感「${avgRpeLabel}」`;
+  const subjectiveLine = `上周打卡 ${prev.checkedCount}/${prev.totalWorkouts}，完成率 ${ratePct}%，平均体感「${avgRpeLabel}」`;
+  // 2.3：双源合并时展示客观裁决证据与合并规则
+  const evidence =
+    prev.adoptedSource === 'merged'
+      ? `${prev.objectiveSummary ?? '客观裁决'}；打卡侧：${subjectiveLine}；冲突取保守`
+      : prev.adoptedSource === 'override'
+        ? `用户已否决客观裁决（${prev.objectiveFactor?.toFixed(2) ?? '—'}），采用 ${factor.toFixed(2)}；打卡侧：${subjectiveLine}`
+        : subjectiveLine;
 
   return {
     change,

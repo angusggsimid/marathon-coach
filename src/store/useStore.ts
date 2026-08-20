@@ -4,6 +4,9 @@ import type { UserProfile, DailyWorkout } from '../utils/training-engine';
 import { generateTrainingPlan } from '../utils/training-engine';
 import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
+import type { ObjectiveAdaptation, AdaptationOverride } from '../utils/weekly-adaptation';
+import { adaptationVerdict } from '../utils/insights/coach';
+import { cycleCaps } from '../utils/insights/cycle';
 import {
   migrateExportSyncState,
   recordFitExportSuccess,
@@ -18,8 +21,42 @@ import {
 } from '../utils/backup';
 import { normalizeWorkoutDate } from '../utils/training-engine';
 import { addDays, format } from 'date-fns';
+import { parseSnapshot } from '../utils/insights/validate';
+import type { CorosSnapshot } from '../utils/insights/types';
+import type { CoachPatch } from '../utils/insights/coach';
+import { loadCorosAuth, saveCorosAuth, type CorosAuth } from '../utils/coros-mcp';
 
-type TabType = 'profile' | 'stats' | 'calendar' | 'races';
+type TabType = 'profile' | 'stats' | 'calendar' | 'races' | 'insights';
+
+// COROS 快照单独持久化（体积大，不入 zustand persist 主键）
+const COROS_SNAPSHOT_KEY = 'marathon-coros-snapshot';
+
+function loadCorosSnapshot(): CorosSnapshot | null {
+  try {
+    const raw = localStorage.getItem(COROS_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const result = parseSnapshot(JSON.parse(raw));
+    return result.ok ? result.snapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 客观裁决在 store 层计算（同步/水合时点），hook 只纯读，避免渲染期不纯 */
+function computeObjective(snapshot: CorosSnapshot | null, lastSyncAt: string | null): ObjectiveAdaptation | null {
+  if (!snapshot || !lastSyncAt) return null;
+  if (Date.now() - new Date(lastSyncAt).getTime() > 7 * 86400000) return null;
+  return adaptationVerdict(snapshot);
+}
+
+/** 手表近 7 天负荷比均值（store 层计算，供训练页 ACWR 卡纯读） */
+function computeLoadRatio(snapshot: CorosSnapshot | null, lastSyncAt: string | null): number | null {
+  if (!snapshot || !lastSyncAt) return null;
+  if (Date.now() - new Date(lastSyncAt).getTime() > 7 * 86400000) return null;
+  const ratios = snapshot.dailyMetrics.slice(-7).filter((m) => m.loadRatio !== undefined);
+  if (ratios.length < 3) return null;
+  return ratios.reduce((s, m) => s + (m.loadRatio ?? 0), 0) / ratios.length;
+}
 
 // 0=没感觉, 1=轻松, 2=正常, 3=累, 4=很累
 export type RPELevel = 0 | 1 | 2 | 3 | 4;
@@ -93,6 +130,22 @@ interface AppState {
   vacations: Vacation[];
   /** 分渠道最后成功导出/同步元数据（本地）；从未成功则为空 */
   exportSync: ExportSyncState;
+  /** COROS 实测数据快照（洞察 Tab 数据源；单独键持久化，不入主 persist） */
+  corosSnapshot: CorosSnapshot | null;
+  /** COROS 授权（token 单独键持久化，不入主 persist） */
+  corosAuth: CorosAuth | null;
+  /** 上次 COROS 同步时间（ISO） */
+  corosLastSyncAt: string | null;
+  /** 自动同步频率（天） */
+  corosSyncIntervalDays: number;
+  /** 2.3 用户对客观裁决的否决（目标周周一 key + factor） */
+  adaptationOverride: AdaptationOverride | null;
+  /** 2.3 客观裁决（store 层计算，hook 纯读） */
+  corosObjective: ObjectiveAdaptation | null;
+  /** 手表近 7 天负荷比均值（store 层计算，组件纯读） */
+  corosLoadRatio: number | null;
+  /** 任务 3：课级就绪门否决（被降级课的日期 key；null = 接受降级） */
+  sessionOverride: string | null;
 
   updateProfile: (updates: Partial<UserProfile>) => void;
   generatePlan: () => void;
@@ -121,6 +174,30 @@ interface AppState {
    * 覆盖白名单字段；强制 icuApiKey=''；不改写 icuAthleteId（最小敏感：备份本身不含）。
    */
   restoreFromBackup: (data: BackupData) => void;
+
+  /** 导入 COROS 快照（校验白名单 + 数值范围）；返回错误信息或 null 表示成功 */
+  importCorosSnapshot: (data: unknown) => string | null;
+  /** 清除 COROS 快照 */
+  clearCorosSnapshot: () => void;
+  /**
+   * 一键校准：把 COROS 实测写入档案（仅 ltPace/lthr）并用引擎重算计划。
+   * 引擎守卫返回空计划时保留旧计划并置 planNeedsRegen。
+   */
+  applyCorosCalibration: (patch: CoachPatch) => { applied: string[]; planRegenerated: boolean };
+
+  /** 更新 COROS 授权（null = 断开）；token 存单独键 */
+  updateCorosAuth: (auth: CorosAuth | null) => void;
+  /** 记录一次成功同步的时间 */
+  setCorosLastSync: (iso: string) => void;
+  /** 设置自动同步频率（天） */
+  setCorosSyncIntervalDays: (days: number) => void;
+
+  /** 2.3：COROS 数据新鲜（≤7 天）时返回客观裁决，否则 null */
+  getObjectiveAdaptation: () => ObjectiveAdaptation | null;
+  /** 2.3：否决/恢复客观裁决 */
+  setAdaptationOverride: (override: AdaptationOverride | null) => void;
+  /** 任务 3：否决课级降级（dateKey）或恢复（null） */
+  setSessionOverride: (dateKey: string | null) => void;
 }
 
 /**
@@ -194,6 +271,14 @@ export const useStore = create<AppState>()(
       myRaces: [],
       vacations: [],
       exportSync: {},
+      corosSnapshot: loadCorosSnapshot(),
+      corosAuth: loadCorosAuth(),
+      corosLastSyncAt: null,
+      corosSyncIntervalDays: 3,
+      adaptationOverride: null,
+      corosObjective: null,
+      corosLoadRatio: null,
+      sessionOverride: null,
 
       updateProfile: (updates) => {
         set({ profile: { ...get().profile, ...updates } });
@@ -258,6 +343,70 @@ export const useStore = create<AppState>()(
         set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'calendar' });
       },
 
+      importCorosSnapshot: (data) => {
+        const result = parseSnapshot(data);
+        if (!result.ok) return result.error;
+        const { corosLastSyncAt } = get();
+        set({
+          corosSnapshot: result.snapshot,
+          corosObjective: computeObjective(result.snapshot, corosLastSyncAt),
+          corosLoadRatio: computeLoadRatio(result.snapshot, corosLastSyncAt),
+        });
+        try {
+          localStorage.setItem(COROS_SNAPSHOT_KEY, JSON.stringify(result.snapshot));
+        } catch { /* 存储满则仅内存态 */ }
+        return null;
+      },
+
+      clearCorosSnapshot: () => {
+        set({ corosSnapshot: null });
+        try { localStorage.removeItem(COROS_SNAPSHOT_KEY); } catch { /* 忽略 */ }
+      },
+
+      applyCorosCalibration: (patch) => {
+        const applied: string[] = [];
+        const updates: Partial<UserProfile> = {};
+        if (patch.ltPace !== undefined && typeof patch.ltPace === 'string' && /^\d{1,2}:\d{2}$/.test(patch.ltPace)) {
+          updates.ltPace = patch.ltPace;
+          applied.push(`乳酸阈配速 → ${patch.ltPace} /km`);
+        }
+        if (patch.lthr !== undefined && Number.isFinite(patch.lthr) && patch.lthr >= 60 && patch.lthr <= 230) {
+          updates.lthr = patch.lthr;
+          applied.push(`乳酸阈心率 → ${patch.lthr} bpm`);
+        }
+        if (applied.length === 0) return { applied, planRegenerated: false };
+
+        const profile = { ...get().profile, ...updates };
+        const plan = generateTrainingPlan(profile);
+        if (plan.length > 0) {
+          set({ profile, plan, isPlanGenerated: true, planNeedsRegen: false });
+          return { applied, planRegenerated: true };
+        }
+        // 引擎守卫拦截：只补档案，计划交回用户手动重生成
+        set({ profile, planNeedsRegen: get().plan.length > 0 });
+        return { applied, planRegenerated: false };
+      },
+
+      updateCorosAuth: (auth) => {
+        set({ corosAuth: auth });
+        saveCorosAuth(auth);
+      },
+
+      setCorosLastSync: (iso) =>
+        set({
+          corosLastSyncAt: iso,
+          corosObjective: computeObjective(get().corosSnapshot, iso),
+          corosLoadRatio: computeLoadRatio(get().corosSnapshot, iso),
+        }),
+
+      setCorosSyncIntervalDays: (days) => set({ corosSyncIntervalDays: days }),
+
+      getObjectiveAdaptation: () => get().corosObjective,
+
+      setAdaptationOverride: (override) => set({ adaptationOverride: override }),
+
+      setSessionOverride: (dateKey) => set({ sessionOverride: dateKey }),
+
       setActiveTab: (tab) => set({ activeTab: tab }),
 
       saveICUCredentials: (apiKey, athleteId) => set({ icuApiKey: apiKey, icuAthleteId: athleteId }),
@@ -316,7 +465,7 @@ export const useStore = create<AppState>()(
       },
 
       getWeeklyAdaptation: (weekEndSunday) => {
-        const { plan, completions } = get();
+        const { plan, completions, getObjectiveAdaptation, adaptationOverride, profile, corosSnapshot } = get();
         // plan 可能经 persist 把 Date 变成 ISO 字符串；compute 内部用 toDateKey 兼容。
         // 说明：此处用原始 plan（不含 race/vacation overlay），与日志周摘要一致；
         // 实际距离缩放见 useEffectivePlan → applyWeeklyAdaptation(basePlan)。
@@ -324,6 +473,9 @@ export const useStore = create<AppState>()(
           plan as Parameters<typeof computeWeeklyAdaptation>[0],
           completions as Record<string, AdaptCompletion>,
           weekEndSunday,
+          getObjectiveAdaptation(),
+          adaptationOverride,
+          cycleCaps(corosSnapshot, profile),
         );
       },
     }),
@@ -335,13 +487,17 @@ export const useStore = create<AppState>()(
       partialize: (state) => {
         const {
           icuApiKey: _omitKey,
+          corosAuth: _omitAuth,
+          corosSnapshot: _omitSnapshot,
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
           completions, icuAthleteId, myRaces, vacations, exportSync,
+          corosLastSyncAt, corosSyncIntervalDays, adaptationOverride, sessionOverride,
         } = state;
-        void _omitKey;
+        void _omitKey; void _omitAuth; void _omitSnapshot;
         return {
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
           completions, icuAthleteId, myRaces, vacations, exportSync,
+          corosLastSyncAt, corosSyncIntervalDays, adaptationOverride, sessionOverride,
         };
       },
       migrate: (persisted: unknown, _fromVersion: number) => {
@@ -350,11 +506,17 @@ export const useStore = create<AppState>()(
       },
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
-        return {
+        const merged = {
           ...current,
           ...p,
           icuApiKey: '',
           exportSync: migrateExportSyncState(p.exportSync),
+        };
+        // 水合时点重算客观裁决（渲染期不纯计算）
+        return {
+          ...merged,
+          corosObjective: computeObjective(merged.corosSnapshot ?? null, merged.corosLastSyncAt ?? null),
+          corosLoadRatio: computeLoadRatio(merged.corosSnapshot ?? null, merged.corosLastSyncAt ?? null),
         };
       },
     }

@@ -17,10 +17,8 @@
  * 仍写入稳定 external_id，便于将来在合同测试通过后升级 bulk upsert。
  *
  * CORS note: Intervals.icu does not set Access-Control-Allow-Origin for browser requests.
- * A lightweight Cloudflare Worker proxy is needed (see cloudflare-worker.js in project root).
- * Set VITE_ICU_PROXY in .env to your deployed worker URL, e.g.:
- *   VITE_ICU_PROXY=https://marathon-icu-proxy.yourname.workers.dev
- * If unset, the app tries direct calls (works in Node / Postman, may fail in browser).
+ * 2026-08-18 清理：原 Cloudflare Worker 代理（cloudflare-worker.js）从未部署且未使用，已移除。
+ * 设置 VITE_ICU_PROXY 可自行部署代理；未设置时应用尝试直连（Node 可用，浏览器可能因 CORS 失败）。
  */
 
 import type { DailyWorkout } from './training-engine';

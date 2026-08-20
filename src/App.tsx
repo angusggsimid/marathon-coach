@@ -1,12 +1,15 @@
-import { type ReactNode, useState, useEffect } from 'react';
+import { type ReactNode, useState, useEffect, lazy, Suspense } from 'react';
 import { ProfileForm } from './components/ProfileForm';
 import { TrainingStats } from './components/TrainingStats';
 import { CalendarView } from './components/CalendarView';
 import { RaceTab } from './components/RaceTab';
 import { WeChatEscapeBanner } from './components/WeChatEscapeBanner';
-import { Activity, CalendarDays, User, Flag } from 'lucide-react';
+import { Activity, CalendarDays, User, Flag, Brain } from 'lucide-react';
 import { useStore } from './store/useStore';
 import { cn } from './utils/cn';
+
+// 洞察 Tab 代码分割：echarts 等重依赖不进首屏包
+const InsightsTab = lazy(() => import('./components/insights/InsightsTab'));
 import {
   detectDisplayMode,
   mutateMetrics,
@@ -15,9 +18,10 @@ import {
   recordOpen,
 } from './utils/local-metrics';
 import { isWeChatUA } from './utils/wechat';
+import { handleCorosCallback } from './utils/coros-mcp';
 
 function App() {
-  const { activeTab, setActiveTab, isPlanGenerated } = useStore();
+  const { activeTab, setActiveTab, isPlanGenerated, updateCorosAuth } = useStore();
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => {
@@ -29,6 +33,29 @@ function App() {
     const t = setTimeout(() => setToast(''), 2200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // COROS OAuth 授权回调：交换 token → 保存 → 清理 URL → 跳转洞察 Tab
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (!code || !state) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const auth = await handleCorosCallback(code, state);
+        if (cancelled) return;
+        updateCorosAuth(auth);
+        history.replaceState(null, '', location.pathname);
+        setActiveTab('insights');
+        showToast('COROS 已连接');
+      } catch (e) {
+        if (!cancelled) showToast(e instanceof Error ? e.message : 'COROS 连接失败');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 本机会话指标：打开、display-mode、微信入口、安装事件（不上传）
   useEffect(() => {
@@ -84,6 +111,14 @@ function App() {
         {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'races'    && <RaceTab />}
       </main>
+      {/* 洞察与其他 Tab 同宽（手机式窄栏），内部单栏，全端一致 */}
+      {activeTab === 'insights' && (
+        <main className="max-w-lg mx-auto px-4 pt-5">
+          <Suspense fallback={<div className="pt-10 text-center text-[13px] text-[var(--color-label-3)]">正在载入洞察…</div>}>
+            <InsightsTab />
+          </Suspense>
+        </main>
+      )}
 
       {/* Bottom tab bar */}
       <nav className="fixed bottom-0 inset-x-0 z-50 bg-[var(--color-bg)]/92 backdrop-blur-xl border-t border-[var(--color-separator)]">
@@ -92,6 +127,7 @@ function App() {
           <NavItem icon={<Activity className="w-[22px] h-[22px]" />}     label="指标" isActive={activeTab === 'stats'}    onClick={() => setActiveTab('stats')}    disabled={!isPlanGenerated} onDisabledClick={() => showToast('先在「档案」生成训练计划 →')} />
           <NavItem icon={<CalendarDays className="w-[22px] h-[22px]" />} label="训练" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} disabled={!isPlanGenerated} onDisabledClick={() => showToast('先在「档案」生成训练计划 →')} />
           <NavItem icon={<Flag className="w-[22px] h-[22px]" />}         label="赛事" isActive={activeTab === 'races'}    onClick={() => setActiveTab('races')} />
+          <NavItem icon={<Brain className="w-[22px] h-[22px]" />}        label="洞察" isActive={activeTab === 'insights'} onClick={() => setActiveTab('insights')} />
         </div>
       </nav>
 

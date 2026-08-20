@@ -29,7 +29,29 @@ export interface WeekAdaptationResult {
   totalWorkouts: number;
   advice: string;
   factor: number;
+  /** 2.3 双源合并元数据（仅当传入 objective/override 时存在） */
+  subjectiveFactor?: number;
+  objectiveFactor?: number;
+  adoptedSource?: 'subjective' | 'merged' | 'override';
+  objectiveSummary?: string;
+  /** 任务 4 周期层上限元数据 */
+  cycleReasons?: string[];
 }
+
+/** 客观裁决（COROS 六信号），由 insights 的 adaptationVerdict 产出 */
+export interface ObjectiveAdaptation {
+  factor: 0.90 | 1.00 | 1.05;
+  summary: string;
+  signals: Array<{ name: string; direction: 'risk' | 'positive' | 'neutral'; detail: string }>;
+}
+
+/** 用户否决：对指定目标周（周一 key）强制使用某 factor */
+export interface AdaptationOverride {
+  weekKey: string; // 目标周周一 yyyy-MM-dd
+  factor: number;
+}
+
+import type { CycleCaps } from './insights/cycle';
 
 /**
  * 统一成 YYYY-MM-DD（本地日历日）。
@@ -48,6 +70,41 @@ export function toDateKey(value: Date | string): string {
   return format(value, 'yyyy-MM-dd');
 }
 
+/** 2.3：把客观裁决/用户否决合并进主观裁决结果。冲突取保守（min），override 优先。
+ *  任务 4：cycle 上限（解耦/EF 信号）在合并后封顶。 */
+function applyObjectiveMerge(
+  r: WeekAdaptationResult,
+  weekEndSunday: Date,
+  objective: ObjectiveAdaptation | null,
+  override: AdaptationOverride | null,
+  cycle: CycleCaps | null = null,
+): WeekAdaptationResult {
+  let factor = r.factor;
+  if (objective) {
+    r.subjectiveFactor = r.factor;
+    r.objectiveFactor = objective.factor;
+    r.objectiveSummary = objective.summary;
+    r.adoptedSource = 'merged';
+    factor = Math.min(r.factor, objective.factor);
+    r.advice = `客观裁决 ${objective.factor.toFixed(2)} × 打卡裁决 ${r.factor.toFixed(2)} → 采用 ${factor.toFixed(2)}（冲突取保守）`;
+  }
+  const targetKey = format(addDays(weekEndSunday, 1), 'yyyy-MM-dd');
+  if (override && override.weekKey === targetKey) {
+    if (r.subjectiveFactor === undefined) r.subjectiveFactor = r.factor;
+    r.adoptedSource = 'override';
+    factor = override.factor;
+    r.advice = `已否决客观裁决：本周采用 ${factor.toFixed(2)}（打卡裁决 ${r.subjectiveFactor.toFixed(2)} / 客观 ${r.objectiveFactor?.toFixed(2) ?? '—'}）`;
+  }
+  // 任务 4：周期层上限封顶（override 不豁免——安全方向）
+  if (cycle && cycle.reasons.length > 0 && factor > cycle.cap) {
+    factor = cycle.cap;
+    r.cycleReasons = cycle.reasons;
+    r.advice = `${r.advice}；周期层封顶 ${cycle.cap.toFixed(2)}：${cycle.reasons[0]}`;
+  }
+  r.factor = factor;
+  return r;
+}
+
 function parseLocalDay(value: Date | string): Date {
   if (value instanceof Date) {
     return startOfDay(value);
@@ -60,11 +117,16 @@ function parseLocalDay(value: Date | string): Date {
   return startOfDay(Number.isNaN(d.getTime()) ? new Date(NaN) : d);
 }
 
-/** 根据某周（以周日结尾的 ISO 周，周一为周起点）打卡数据计算建议系数 */
+/** 根据某周（以周日结尾的 ISO 周，周一为周起点）打卡数据计算建议系数。
+ *  2.3：可选 objective（COROS 客观裁决）与 override（用户否决）。
+ *  合并铁律：主客观冲突取保守（min）；override 优先于一切。 */
 export function computeWeeklyAdaptation(
   plan: DailyWorkout[],
   completions: Record<string, CompletionEntry>,
   weekEndSunday: Date,
+  objective: ObjectiveAdaptation | null = null,
+  override: AdaptationOverride | null = null,
+  cycle: CycleCaps | null = null,
 ): WeekAdaptationResult {
   const weekStart = startOfWeek(weekEndSunday, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(weekEndSunday, { weekStartsOn: 1 });
@@ -78,14 +140,14 @@ export function computeWeeklyAdaptation(
 
   const totalWorkouts = scheduledWorkouts.length;
   if (totalWorkouts === 0) {
-    return {
+    return applyObjectiveMerge({
       completionRate: 1,
       avgRpe: 2,
       checkedCount: 0,
       totalWorkouts: 0,
       advice: '本周无训练记录',
       factor: 1.0,
-    };
+    }, weekEndSunday, objective, override, cycle);
   }
 
   const checkedIn = scheduledWorkouts
@@ -94,14 +156,14 @@ export function computeWeeklyAdaptation(
 
   const checkedCount = checkedIn.length;
   if (checkedCount === 0) {
-    return {
+    return applyObjectiveMerge({
       completionRate: 0,
       avgRpe: 2,
       checkedCount: 0,
       totalWorkouts,
       advice: '本周尚未打卡',
       factor: 1.0,
-    };
+    }, weekEndSunday, objective, override, cycle);
   }
 
   const skipped = checkedIn.filter(c => c.status === 'skip').length;
@@ -123,7 +185,7 @@ export function computeWeeklyAdaptation(
     factor = 1.0;
   }
 
-  return { completionRate, avgRpe, checkedCount, totalWorkouts, advice, factor };
+  return applyObjectiveMerge({ completionRate, avgRpe, checkedCount, totalWorkouts, advice, factor }, weekEndSunday, objective, override, cycle);
 }
 
 function scaleDistance(km: number | undefined, factor: number): number | undefined {
@@ -178,6 +240,9 @@ export function applyWeeklyAdaptation(
   plan: DailyWorkout[],
   completions: Record<string, CompletionEntry>,
   asOf: Date = new Date(),
+  objective: ObjectiveAdaptation | null = null,
+  override: AdaptationOverride | null = null,
+  cycle: CycleCaps | null = null,
 ): DailyWorkout[] {
   if (plan.length === 0) return plan;
 
@@ -191,8 +256,9 @@ export function applyWeeklyAdaptation(
   // 上一周必须已完全过去（周日 < 今天）
   if (!isBefore(prevWeekSunday, today)) return plan;
 
-  const adaptation = computeWeeklyAdaptation(plan, completions, prevWeekSunday);
-  if (adaptation.factor === 1 || adaptation.checkedCount === 0) return plan;
+  const adaptation = computeWeeklyAdaptation(plan, completions, prevWeekSunday, objective, override, cycle);
+  // 2.3：客观裁决可在无打卡时也生效，故仅以 factor 判断
+  if (adaptation.factor === 1) return plan;
 
   const nextWeekMonday = addDays(prevWeekMonday, 7);
   const nextWeekSunday = addDays(nextWeekMonday, 6);
@@ -213,6 +279,9 @@ export function getActiveAdaptationMeta(
   plan: DailyWorkout[],
   completions: Record<string, CompletionEntry>,
   asOf: Date = new Date(),
+  objective: ObjectiveAdaptation | null = null,
+  override: AdaptationOverride | null = null,
+  cycle: CycleCaps | null = null,
 ): { active: boolean; factor: number; advice: string; prevWeek: WeekAdaptationResult | null } {
   if (plan.length === 0) {
     return { active: false, factor: 1, advice: '', prevWeek: null };
@@ -223,8 +292,8 @@ export function getActiveAdaptationMeta(
   if (!isBefore(prevWeekSunday, today)) {
     return { active: false, factor: 1, advice: '', prevWeek: null };
   }
-  const prevWeek = computeWeeklyAdaptation(plan, completions, prevWeekSunday);
-  if (prevWeek.factor === 1 || prevWeek.checkedCount === 0) {
+  const prevWeek = computeWeeklyAdaptation(plan, completions, prevWeekSunday, objective, override, cycle);
+  if (prevWeek.factor === 1) {
     return { active: false, factor: 1, advice: '', prevWeek };
   }
   // 自适应作用在「上一完整周之后的那一周」——若今天落在该周则 active
