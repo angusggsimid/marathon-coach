@@ -1,81 +1,61 @@
-# Marathon — 马拉松备赛 Web App
+# Marathon · 马拉松备赛 / Marathon Race-Prep App
 
-面向中文跑者的备赛工具：根据成绩与目标赛事生成训练计划，提供配速/心率区间、训练日历、打卡、导出与 Intervals.icu 同步。
+面向中文跑者的马拉松备赛 PWA：填写成绩与目标赛事，30 秒生成个性化训练计划；连接 COROS 手表后自动同步训练数据，用科学指标解读身体状态，并持续校准你的训练方案。
 
-**执行本体**：未来 90 天以 **PWA** 为主（可安装、离线预缓存赛事数据、本机状态）。不依赖小程序/原生 App。
+_A marathon-prep PWA for Chinese runners: fill in your results and target race, and get a personalized training plan in 30 seconds. Connect your COROS watch to auto-sync training data, interpret your body with science-based metrics, and keep your plan calibrated._
 
-## 线上地址
+## ✨ 功能 / Features
 
-- 生产（Vercel）：https://marathon-pi-seven.vercel.app
-- 生产（腾讯云 EdgeOne）：https://marathon-gzgm45fm.edgeone.cool
-- 仓库：https://github.com/angusggsimid/marathon
-
-两个生产环境都关联了 GitHub `main` 分支，每次 push 自动部署。
-
-## 用户可见能力（摘要）
-
-| 能力 | 说明 |
+| 能力 / Ability | 说明 / Description |
 |---|---|
-| 生成计划 | 档案页填成绩/目标 → 训练日历与配速区间 |
-| 打卡 / 自适应 | 本周视图、周报、距离自适应 |
-| 导出 | ICS 日历、FIT（今天/本周/全部）、Intervals.icu 同步 |
-| **安装 PWA** | PNG 192/512 + maskable、iOS `apple-touch-icon`（绿底+黑跑者，与 header 品牌一致） |
-| **数据与备份** | 档案页导出/恢复 JSON（无 API Key；Athlete ID 不进备份且本机保留；恢复不改标签页，留在档案页） |
-| **微信提示** | 仅微信内显示逃生舱：复制链接 + 系统浏览器打开说明 |
-| **试用诊断** | 本机聚合计数导出（日粒度）；不含计划/成绩/密钥 |
+| **生成计划 / Plan** | 成绩 → VDOT → 周期化每日课表（基础/强度/峰值/减量）+ 配速·心率区间 |
+| **打卡与自适应 / Check-in & Adaptation** | 本周视图、周报、距离自适应（主观打卡 × COROS 客观裁决，冲突取保守） |
+| **COROS 直连 / COROS Live Sync** | OAuth 一键授权，按设定频率自动同步活动、负荷、睡眠、HRV、体能评估 |
+| **科学解读 / Insights** | 效率因子（EF）、有氧解耦、Seiler 80/20 强度分布、恢复雷达、睡眠负债、课级就绪门 |
+| **Garmin 导入 / Garmin Import** | 拖拽 .fit 文件即解析，执行侧指标全量支持 |
+| **赛事库 / Race Library** | 1200+ 场中国赛事，多源聚合，每日自动刷新 |
+| **导出 / Export** | 日历 ICS、FIT、Intervals.icu 同步（可选代理） |
 
-## 本地开发
+## 🚀 线上地址 / Live Sites
+
+- Vercel：https://marathon-pi-seven.vercel.app
+- 腾讯云 EdgeOne：https://marathon-gzgm45fm.edgeone.cool
+
+两个生产环境均关联 GitHub `main` 分支自动部署。_Both production environments auto-deploy from the `main` branch._
+
+## 🛠 本地运行 / Local Development
 
 ```bash
 npm install
-npm run dev
+npm run dev      # http://localhost:5173
+npm run build    # 生产构建
+npm run test:core # 引擎与算法自测（307 用例）
 ```
 
-```bash
-npm run lint
-npm run build
-npm run test:core
+> 开发环境会自动复用本机 OpenCode 的 COROS 授权（`/__dev/coros-auth`），免反复登录；生产环境走标准 OAuth。
+
+## 🧠 工作原理 / How It Works
+
+```
+成绩/PB ──→ 训练引擎（VDOT + COROS EvoLab 区间）──→ 周期化计划
+                                                     │
+COROS 手表 ──MCP/OAuth──→ 快照 ──→ 科学解读（EF/解耦/Seiler/恢复）
+        ──→ 客观裁决 × 主观打卡 ──→ 下周计划调整（可一键否决）
 ```
 
-PWA 浏览器验收（需先 `npm run build` + `npx vite preview`）：
+引擎、算法、接口全部为纯函数 + 自测覆盖（`src/utils/`、`scripts/selftest-core.mts`）。
 
-```bash
-node acceptance-2026-07-15-pwa/browser-acceptance.mjs
-```
+## 📦 技术栈 / Tech Stack
 
-爬虫子项目：
+React 19 · Vite 7 · TypeScript · Tailwind CSS v4 · Zustand · ECharts · date-fns · Vite PWA · fit-file-parser
 
-```bash
-cd crawler && npm install
-npm run scrape          # 全量 → output/scraped-races.json（裸数组）
-npm run test:normalize
-npx tsc --noEmit
-```
+## 📁 目录结构 / Structure
 
-公开赛事数据契约（`public/races.json` / `/api/data`）：
+- `src/` — 主应用（档案/指标/训练/赛事/洞察 五 Tab）
+- `crawler/` — 赛事数据爬虫（zuicool / nowrun / chinarun / marathonbm）
+- `scripts/` — 自测与数据脚本
+- `docs` — 架构决策记录（ADR）、任务规划（TRAINING_LOOP）等
 
-```json
-{
-  "generatedAt": "2026-07-13T08:46:23.209Z",
-  "races": [ /* RaceEvent[] */ ]
-}
-```
+## 📜 License
 
-`vercel.json` 将 `/api/data` 重写到 `/races.json`。GitHub Actions 每日 10:17（北京）刷新并写回同一结构。
-
-## 部署
-
-见 `DEPLOY.md`。推送 `main` 后 Vercel 自动构建部署。Intervals.icu 同步为可选通道（当前未启用代理，浏览器直连可能受 CORS 限制）。
-
-中国大陆可达性探针方案（外部、**尚未执行拨测**；阈值标为试运行 SLO，待建基线；需用户后续选具备大陆运营商拨测的供应商）：`PWA_FOUNDATION_MEASUREMENT_2026-07-15.md`。
-
-## 当前数据快照（2026-07-13 发布）
-
-| 指标 | 值 |
-|---|---:|
-| 赛事总数 | 1253 |
-| 未来赛事 | 325 |
-| 报名中 open | 72 |
-| generatedAt | 2026-07-13T08:46:23.209Z |
-
-详细状态见 `CONTEXT.md`。
+[MIT](LICENSE)
