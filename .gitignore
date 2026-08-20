@@ -62,3 +62,6 @@ local-data/
 
 # Playwright 工件（含个人数据截图）
 .playwright-mcp/
+
+# 本地项目日志（含个人训练数据，不公开）
+CONTEXT.md
