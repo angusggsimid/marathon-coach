@@ -9,7 +9,7 @@ _A marathon-prep PWA for Chinese runners: fill in your results and target race, 
 | 能力 / Ability | 说明 / Description |
 |---|---|
 | **生成计划 / Plan** | 成绩 → VDOT → 周期化每日课表（基础/强度/峰值/减量）+ 配速·心率区间 |
-| **打卡与自适应 / Check-in & Adaptation** | 本周视图、周报、距离自适应（主观打卡 × COROS 客观裁决，冲突取保守） |
+| **打卡与自适应 / Check-in & Adaptation** | 本周视图、周报、距离自适应（主观打卡 × COROS 客观裁决，冲突取保守）；同步后自动匹配「活动↔计划课」生成打卡建议（一键确认，质量课按配速门判部分完成） |
 | **COROS 直连 / COROS Live Sync** | OAuth 一键授权，按设定频率自动同步活动、负荷、睡眠、HRV、体能评估 |
 | **科学解读 / Insights** | 效率因子（EF）、有氧解耦、Seiler 80/20 强度分布、恢复雷达、睡眠负债、课级就绪门 |
 | **Garmin 导入 / Garmin Import** | 拖拽 .fit 文件即解析，执行侧指标全量支持 |

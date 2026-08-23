@@ -4,6 +4,8 @@ import { useStore, RPE_LABELS, RPE_COLORS } from '../store/useStore';
 import { useBasePlan, useEffectivePlan, useAdaptationInputs, useSessionGate } from '../hooks/useEffectivePlan';
 import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
+import { countStreak } from '../utils/checkin-streak';
+import { computeACWR } from '../utils/acwr';
 import type { CheckInMessage } from '../utils/checkin-messages';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy, ChevronDown } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
@@ -339,6 +341,9 @@ export function CalendarView() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const currentWeekVolume = Math.round(currentWeekWorkouts.reduce((sum, w) => sum + (w.distanceKm || 0), 0) * 10) / 10;
   const currentWeekWorkoutCount = currentWeekWorkouts.filter(w => w.workoutType !== 'Rest').length;
+  // 连续打卡 + 本周完成率（口径同周报：非 Rest/Race 课）
+  const streak = countStreak(completions);
+  const weekAdaptation = getWeeklyAdaptation(currentWeekEnd);
   const targetRace = myRaces.find(r => r.date === profile.raceDate && !r.dateTBD);
   const targetRaceName = targetRace?.name ?? (profile.raceType === 'full' ? '全马目标赛' : '半马目标赛');
   const shareText = [
@@ -1238,6 +1243,25 @@ export function CalendarView() {
               <p className="text-[10px] text-[var(--color-label-3)] mt-1">本周 · {currentWeekWorkoutCount} 节</p>
             </div>
           </div>
+          <div className="px-4 pb-3 pt-1 flex items-center gap-2">
+            <span className="text-[11.5px] text-[var(--color-label-2)]">
+              {streak > 0
+                ? <span className="font-semibold text-[var(--color-orange)]">🔥 连续打卡 {streak} 天</span>
+                : <span className="text-[var(--color-label-3)]">今天开始打卡吧</span>}
+            </span>
+            <span className="mx-1 text-[var(--color-label-4)]">·</span>
+            {weekAdaptation.totalWorkouts > 0 && (
+              <span className="text-[11.5px] text-[var(--color-label-3)]">
+                本周完成率 {Math.round(weekAdaptation.completionRate * 100)}%（{weekAdaptation.checkedCount}/{weekAdaptation.totalWorkouts}）
+              </span>
+            )}
+            <div className="flex-1 h-1.5 rounded-full bg-[var(--color-surface-2)] overflow-hidden ml-1">
+              <div
+                className="h-full rounded-full bg-[var(--color-accent)] transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round(weekAdaptation.completionRate * 100))}%` }}
+              />
+            </div>
+          </div>
           <div>
             {weekDays.map((dayItem, idx) => {
               const workout = plan.find(w => isSameDay(new Date(w.date), dayItem));
@@ -1519,90 +1543,6 @@ export function CalendarView() {
   );
 }
 
-// ─── ACWR helpers ────────────────────────────────────────────────────────────
-
-interface ACWRResult {
-  acwr: number;
-  acuteKm: number;        // last 7 days
-  chronicAvgKm: number;   // avg weekly km over last 28 days
-  daysOfData: number;     // how many completed days we found
-}
-
-function computeACWR(
-  plan: DailyWorkout[],
-  completions: Record<string, { status: string }>
-): ACWRResult | null {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // How many days ago the plan starts
-  const planStart = new Date(plan[0].date);
-  planStart.setHours(0, 0, 0, 0);
-  const daysSincePlanStart = Math.floor((today.getTime() - planStart.getTime()) / 86400000);
-
-  if (daysSincePlanStart < 0) return null;
-
-  // Build a lookup of planned km × completion factor
-  const dailyLoad: Record<string, number> = {};
-  for (const w of plan) {
-    const d = new Date(w.date);
-    d.setHours(0, 0, 0, 0);
-    const diff = Math.floor((today.getTime() - d.getTime()) / 86400000);
-    if (diff < 0 || diff > 27) continue; // only last 28 days
-
-    const dateStr = format(d, 'yyyy-MM-dd');
-    const comp = completions[dateStr];
-    const planned = w.distanceKm ?? 0;
-
-    let factor = 0;
-    if (comp) {
-      if (comp.status === 'full')    factor = 1.0;
-      else if (comp.status === 'partial') factor = 0.5;
-      else factor = 0; // skip
-    } else if (diff === 0) {
-      // today — count planned if not yet checked in
-      factor = 0;
-    } else {
-      // past day, no check-in — assume completed if it's a planned workout
-      factor = planned > 0 ? 1.0 : 0;
-    }
-
-    dailyLoad[dateStr] = planned * factor;
-  }
-
-  const daysOfData = Object.keys(dailyLoad).length;
-  if (daysOfData < 7) return null;
-
-  // Acute: sum of last 7 days
-  let acuteKm = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = format(d, 'yyyy-MM-dd');
-    acuteKm += dailyLoad[key] ?? 0;
-  }
-
-  // Chronic: avg weekly load over last 28 days (4 rolling weeks)
-  let chronicTotal = 0;
-  for (let week = 0; week < 4; week++) {
-    let weekKm = 0;
-    for (let day = 0; day < 7; day++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (week * 7 + day));
-      const key = format(d, 'yyyy-MM-dd');
-      weekKm += dailyLoad[key] ?? 0;
-    }
-    chronicTotal += weekKm;
-  }
-  const chronicAvgKm = chronicTotal / 4;
-
-  if (chronicAvgKm < 0.5) return null; // avoid division-by-zero / meaningless ratio
-
-  const acwr = Math.round((acuteKm / chronicAvgKm) * 100) / 100;
-
-  return { acwr, acuteKm: Math.round(acuteKm * 10) / 10, chronicAvgKm: Math.round(chronicAvgKm * 10) / 10, daysOfData };
-}
-
 function getACWRZone(acwr: number): { label: string; advice: string; color: string; bgColor: string } {
   if (acwr < 0.8)  return { label: '训练不足', advice: '本周跑量偏低，可适当增加轻松跑强度。', color: '#0A84FF', bgColor: 'rgba(10,132,255,0.12)' };
   if (acwr <= 1.3) return { label: '安全区间', advice: '当前负荷科学合理，保持节奏即可。',        color: '#32D74B', bgColor: 'rgba(50,215,75,0.12)' };
@@ -1713,7 +1653,9 @@ function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Re
         <div>
           <p className="text-[32px] font-bold font-mono leading-none" style={{ color: zone.color }}>{acwr.toFixed(2)}</p>
           <p className="text-[11px] text-[var(--color-label-3)] mt-1">
-            {corosRatio !== null ? '来自手表近 7 天负荷' : '来自打卡估算'} · {zone.advice}
+            {corosRatio !== null
+              ? '来自手表近 7 天负荷'
+              : `来自打卡（${result?.assumedDays ?? 0} 天未打卡按 0 计）`} · {zone.advice}
           </p>
         </div>
         {acuteKm !== undefined && chronicAvgKm !== undefined && (

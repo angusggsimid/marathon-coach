@@ -93,6 +93,14 @@ import {
   viewportBucket,
 } from '../src/utils/local-metrics.ts';
 
+import {
+  matchActivitiesToPlan,
+  buildAutoCheckinSuggestions,
+  buildAutoCheckinSuggestionsFromAppState,
+} from '../src/utils/auto-checkin.ts';
+import { countStreak } from '../src/utils/checkin-streak.ts';
+import { computeACWR } from '../src/utils/acwr.ts';
+
 let passed = 0;
 let failed = 0;
 
@@ -1637,6 +1645,272 @@ console.log('\n── P3-1 回归：FIT 编码 / 赛事覆盖层 / 打卡文案 
   assert(fullMsg.text.length > 0, '文案: full 高 RPE 返回有效消息');
   const easyMsg = getCheckInMessage('full', 1, 'LSD');
   assert(easyMsg.text.length > 0, '文案: full 低 RPE 返回有效消息');
+}
+
+console.log('\n── auto-checkin：活动 ↔ 计划匹配 ──');
+{
+  const plan: DailyWorkout[] = [
+    { date: parseLocalDate('2026-08-17'), workoutType: 'Easy', description: 'Easy 8k', distanceKm: 8 },
+    { date: parseLocalDate('2026-08-18'), workoutType: 'Rest', description: '休息' },
+    { date: parseLocalDate('2026-08-19'), workoutType: 'LSD', description: 'LSD 18k', distanceKm: 18 },
+    { date: parseLocalDate('2026-08-20'), workoutType: 'Tempo', description: 'Tempo 8k', distanceKm: 8, targetPace: "4'26\"-4'50\"" },
+  ];
+  const run = (date: string, distanceKm: number, extra: Partial<import('../src/utils/insights/types.ts').ActualActivity> = {}) =>
+    ({ date, type: 'run', distanceKm, ...extra });
+
+  // 同日期 + 距离在容差内 → full
+  const full = matchActivitiesToPlan(plan, [run('2026-08-17', 8.4)]);
+  assert(full.length === 1 && full[0].dateStr === '2026-08-17', '匹配: 距离容差内 full');
+  assert(full[0].status === 'full' && full[0].plannedKm === 8 && full[0].actualKm === 8.4, '匹配: full 字段');
+  assert(full[0].workoutType === 'Easy', '匹配: 课型');
+
+  // 跑量显著不足（18km 只跑 9km=0.5）→ partial
+  const partial = matchActivitiesToPlan(plan, [run('2026-08-19', 9)]);
+  assert(partial.length === 1 && partial[0].status === 'partial', '匹配: 半程 partial');
+
+  // 跑量过短（0.28 < 0.4 下限）→ 不匹配
+  assert(matchActivitiesToPlan(plan, [run('2026-08-19', 5)]).length === 0, '匹配: 过短不匹配');
+
+  // 跑量超出太多（1.875 > 1.3 上限）→ 不匹配
+  assert(matchActivitiesToPlan(plan, [run('2026-08-20', 15)]).length === 0, '匹配: 超量太多不匹配');
+
+  // 休息日（无距离课）→ 不匹配
+  assert(matchActivitiesToPlan(plan, [run('2026-08-18', 5)]).length === 0, '匹配: Rest 日不匹配');
+
+  // 非 run 活动（力量）→ 不匹配
+  assert(matchActivitiesToPlan(plan, [{ date: '2026-08-17', type: 'strength', distanceKm: 0 }]).length === 0, '匹配: 力量课不匹配');
+
+  // 日期不同 → 不匹配
+  assert(matchActivitiesToPlan(plan, [run('2026-08-16', 8.2)]).length === 0, '匹配: 日期不同不匹配');
+
+  // 同日多次跑 → 取距离比最接近 1 的
+  const multi = matchActivitiesToPlan(plan, [run('2026-08-17', 4), run('2026-08-17', 8.1)]);
+  assert(multi.length === 1 && multi[0].actualKm === 8.1, '匹配: 同日取最近距离');
+
+  // 已有打卡 → 跳过（不覆盖手动记录）
+  const existing = { '2026-08-17': { status: 'full' as const, rpe: 3 as const } };
+  const filtered = buildAutoCheckinSuggestions(plan, [run('2026-08-17', 8.1), run('2026-08-19', 17)], existing);
+  assert(filtered.length === 1 && filtered[0].dateStr === '2026-08-19', '匹配: 已有打卡跳过');
+  assert(filtered[0].status === 'full' && filtered[0].rpe === 2, '匹配: full 默认 RPE 2');
+
+  // 建议的默认 RPE 为 2（正常），用户可改
+  assert(matchActivitiesToPlan(plan, [run('2026-08-20', 7.9)])[0].rpe === 2, '匹配: 默认 RPE 2');
+
+  // 配速门：质量课（有 targetPace）明显慢于目标区间 → full 降 partial
+  const paceOff = matchActivitiesToPlan(plan, [run('2026-08-20', 7.5, { avgPaceSec: 400 })]);
+  assert(paceOff.length === 1 && paceOff[0].status === 'partial', '匹配: 质量课配速过慢降 partial');
+  // 配速在目标范围内 → full
+  const paceOk = matchActivitiesToPlan(plan, [run('2026-08-20', 7.9, { avgPaceSec: 280 })]);
+  assert(paceOk.length === 1 && paceOk[0].status === 'full', '匹配: 质量课配速达标 full');
+  // 轻松课不查配速（只有距离门）
+  const easySlow = matchActivitiesToPlan(plan, [run('2026-08-17', 7.5, { avgPaceSec: 480 })]);
+  assert(easySlow.length === 1 && easySlow[0].status === 'full', '匹配: 轻松课忽略配速');
+  // Progression（引擎真实课型）同样匹配 + 配速门
+  const prog = matchActivitiesToPlan(
+    [{ date: parseLocalDate('2026-08-21'), workoutType: 'Progression', description: 'p', distanceKm: 8, targetPace: "4'26\"-4'50\"" }],
+    [run('2026-08-21', 7.6, { avgPaceSec: 400 })],
+  );
+  assert(prog.length === 1 && prog[0].status === 'partial', '匹配: Progression 课匹配 + 配速门');
+  // 配速略慢（≤25%）仍算达标（热身/冷身混入均值）
+  const paceSlightlyOff = matchActivitiesToPlan(plan, [run('2026-08-20', 7.8, { avgPaceSec: 360 })]);
+  assert(paceSlightlyOff[0].status === 'full', '匹配: 配速略慢仍 full');
+}
+
+console.log('\n── auto-checkin 2：生效计划口径 + RPE 细化 ──');
+{
+  // 就绪门降级场景：3 天内强度课在恢复不足时被降级为轻松跑，
+  // 用户按降级课跑 → 应判 full（Easy 无配速门），而不是按原 TempoIntervals 判 partial。
+  const asOf = new Date('2026-08-23T04:00:00Z');
+  const effPlanInput: import('../src/utils/auto-checkin.ts').AutoCheckinStateInput = {
+    plan: [
+      { date: asOf, workoutType: 'Easy', description: 'Easy 6k', distanceKm: 6 },
+      { date: new Date('2026-08-25T04:00:00Z'), workoutType: 'TempoIntervals', description: '节奏间歇 8k', distanceKm: 8, targetPace: "4'26\"-4'50\"" },
+    ],
+    completions: {},
+    myRaces: [],
+    vacations: [],
+    profile: {
+      height: 175, weight: 65,
+      pb5k: '20:00', pb10k: '42:00', pbHalf: '1:35:00', pbFull: '3:30:00',
+      lthr: 170, ltPace: '4:30',
+      raceDate: '2026-11-15', raceType: 'full', goalTime: '3:30:00',
+      intensity: 'moderate', longRunDay: 0,
+    },
+    corosSnapshot: null,
+    objective: null,
+    override: null,
+    sessionOverride: null,
+    asOf,
+  };
+  const easyRun = { date: '2026-08-25', type: 'run', name: '轻松跑', distanceKm: 7, avgPaceSec: 400 };
+  const riskSnapshot = {
+    version: 1, source: 'test', builtAt: 'x', device: '',
+    recovery: { pct: 30 },
+    activities: [easyRun],
+    dailyMetrics: [
+      { date: '2026-08-21', hrvMs: 30, hrvBaseline: 50 },
+      { date: '2026-08-22', hrvMs: 30, hrvBaseline: 50 },
+      { date: '2026-08-23', hrvMs: 30, hrvBaseline: 50 },
+    ],
+  };
+  const goodSnapshot = {
+    version: 1, source: 'test', builtAt: 'x', device: '',
+    recovery: { pct: 80 },
+    activities: [easyRun],
+    dailyMetrics: [
+      { date: '2026-08-21', hrvMs: 55, hrvBaseline: 50 },
+      { date: '2026-08-22', hrvMs: 55, hrvBaseline: 50 },
+      { date: '2026-08-23', hrvMs: 55, hrvBaseline: 50 },
+    ],
+  };
+
+  // 恢复不足：就绪门降级 → 轻松跑 7km 对降级后的 Easy 8km → full
+  const riskSuggestions = buildAutoCheckinSuggestionsFromAppState({
+    ...effPlanInput, corosSnapshot: riskSnapshot as never,
+  });
+  assert(
+    riskSuggestions.length === 1 && riskSuggestions[0].status === 'full',
+    '生效计划: 恢复不足降级后按轻松跑判 full',
+  );
+  // 恢复正常：不降级 → 同一次轻松跑对 TempoIntervals → 配速门判 partial
+  const goodSuggestions = buildAutoCheckinSuggestionsFromAppState({
+    ...effPlanInput, corosSnapshot: goodSnapshot as never,
+  });
+  assert(
+    goodSuggestions.length === 1 && goodSuggestions[0].status === 'partial',
+    '生效计划: 恢复正常按原强度课判 partial',
+  );
+
+  // 休假覆盖：休假中的课不产生建议（课变 Rest）
+  const vacationSuggestions = buildAutoCheckinSuggestionsFromAppState({
+    ...effPlanInput,
+    corosSnapshot: goodSnapshot as never,
+    vacations: [{ id: 'v1', start: '2026-08-24', end: '2026-08-26' }],
+  });
+  assert(vacationSuggestions.length === 0, '生效计划: 休假中的课不匹配');
+
+  // RPE 细化：partial（配速门）→ RPE 1
+  assert(goodSuggestions[0].rpe === 1, 'RPE: 配速门 partial → 1');
+  // 质量课 full 且配速快于区间快端 → RPE 3
+  const fastRun = { date: '2026-08-25', type: 'run', name: 't', distanceKm: 7.9, avgPaceSec: 250 };
+  // 简化：直接测 matchActivitiesToPlan 的 RPE 规则
+  const plan2: DailyWorkout[] = [
+    { date: parseLocalDate('2026-08-25'), workoutType: 'Tempo', description: 't', distanceKm: 8, targetPace: "4'26\"-4'50\"" },
+  ];
+  const fast = matchActivitiesToPlan(plan2, [{ date: '2026-08-25', type: 'run', distanceKm: 7.9, avgPaceSec: 250 }]);
+  assert(fast[0].rpe === 3, 'RPE: 快于目标区间 → 3');
+  const inRange = matchActivitiesToPlan(plan2, [{ date: '2026-08-25', type: 'run', distanceKm: 7.9, avgPaceSec: 280 }]);
+  assert(inRange[0].rpe === 2, 'RPE: 区间内 → 2');
+  const slowish = matchActivitiesToPlan(plan2, [{ date: '2026-08-25', type: 'run', distanceKm: 7.9, avgPaceSec: 360 }]);
+  assert(slowish[0].rpe === 1, 'RPE: 慢于慢端 ≤25% → 1');
+  // Easy 课 full → RPE 2（无配速信息可用，保持中性）
+  const easyP = matchActivitiesToPlan([{ date: parseLocalDate('2026-08-25'), workoutType: 'Easy', description: 'e', distanceKm: 6 }],
+    [{ date: '2026-08-25', type: 'run', distanceKm: 5.8, avgPaceSec: 480 }]);
+  assert(easyP[0].rpe === 2, 'RPE: 轻松课保持 2');
+}
+
+console.log('\n── checkin-streak：连续打卡 ──');
+{
+  const asOf = new Date('2026-08-23T04:00:00Z'); // 周日
+  const day = (offset: number) => {
+    const d = new Date(asOf);
+    d.setDate(d.getDate() + offset);
+    return format(d, 'yyyy-MM-dd');
+  };
+  const full = { status: 'full' as const, rpe: 2 as const };
+
+  // 空 → 0
+  assert(countStreak({}, asOf) === 0, 'streak: 无打卡 0');
+  // 今天 + 昨天 + 前天 → 3
+  const three = { [day(0)]: full, [day(-1)]: full, [day(-2)]: full };
+  assert(countStreak(three, asOf) === 3, 'streak: 连续 3 天');
+  // 今天未打卡、昨天起连续 → 从昨天算
+  const noToday = { [day(-1)]: full, [day(-2)]: full, [day(-3)]: full };
+  assert(countStreak(noToday, asOf) === 3, 'streak: 今天未打从昨天起算');
+  // 中间断档 → 只数连续段
+  const broken = { [day(0)]: full, [day(-1)]: full, [day(-3)]: full, [day(-4)]: full };
+  assert(countStreak(broken, asOf) === 2, 'streak: 断档截断');
+  // 今天 + 昨天 + 前天，中间断档在前天之后 → 2
+  const broken2 = { [day(0)]: full, [day(-1)]: full, [day(-4)]: full };
+  assert(countStreak(broken2, asOf) === 2, 'streak: 前天断档');
+  // 跨月边界（8-31 → 9-1）
+  const monthEdge = {
+    '2026-08-31': full, '2026-09-01': full,
+  };
+  assert(countStreak(monthEdge, new Date('2026-09-01T04:00:00Z')) === 2, 'streak: 跨月连续');
+}
+
+console.log('\n── ACWR：打卡实测口径 ──');
+{
+  const asOf = new Date('2026-08-23T04:00:00Z');
+  const day = (offset: number) => {
+    const d = new Date(asOf);
+    d.setDate(d.getDate() + offset);
+    return format(d, 'yyyy-MM-dd');
+  };
+  const mkPlan = (days: number): DailyWorkout[] => Array.from({ length: days }, (_, i) => {
+    const d = new Date(asOf);
+    d.setDate(d.getDate() - (days - 1) + i);
+    return { date: d, workoutType: 'Easy', description: 'e', distanceKm: 10 };
+  });
+  const plan40 = mkPlan(40); // 覆盖完整 28 天窗口
+  const comp = (status: 'full' | 'partial' | 'skip') => ({ status, rpe: 2 as const });
+
+  // 窗口内 28 天全打卡 full → 急=慢 → acwr 1.0
+  const allFull: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -27; i <= 0; i++) allFull[day(i)] = comp('full');
+  const r1 = computeACWR(plan40, allFull, asOf);
+  assert(r1 !== null && Math.abs(r1.acwr - 1) < 0.01, 'ACWR: 全打卡急慢性相等 → 1.0');
+  assert(r1!.checkedDays === 28 && r1!.assumedDays === 0, 'ACWR: 全打卡无假设日');
+
+  // 过去未打卡 → 0 参与（不再按计划完成假设）
+  const onlyPast7: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -6; i <= 0; i++) onlyPast7[day(i)] = comp('full'); // 急性窗口 7 天打卡
+  const r2 = computeACWR(plan40, onlyPast7, asOf);
+  // 急性 = 7×10 = 70；慢性 = 70/4 = 17.5 → acwr = 4.0
+  assert(r2 !== null && Math.abs(r2.acwr - 4) < 0.01, 'ACWR: 未打卡日按 0 计（急性70/慢性17.5）');
+  assert(r2!.assumedDays === 21, 'ACWR: 21 天未打卡按 0 计');
+
+  // partial → 0.5
+  const withPartial: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -27; i <= 0; i++) withPartial[day(i)] = i === -3 ? comp('partial') : comp('full');
+  const r3 = computeACWR(plan40, withPartial, asOf);
+  assert(r3 !== null && r3!.acuteKm === 65, 'ACWR: partial 计 0.5（急性 65）');
+
+  // skip → 0
+  const withSkip: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -27; i <= 0; i++) withSkip[day(i)] = i === -3 ? comp('skip') : comp('full');
+  const r4 = computeACWR(plan40, withSkip, asOf);
+  assert(r4 !== null && r4!.acuteKm === 60, 'ACWR: skip 计 0（急性 60）');
+
+  // 今天未打卡 → 0（不进急性）
+  const noToday: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -27; i <= -1; i++) noToday[day(i)] = comp('full');
+  const r5 = computeACWR(plan40, noToday, asOf);
+  assert(r5 !== null && r5!.acuteKm === 60, 'ACWR: 今天未打卡计 0（急性 60）');
+
+  // 真实打卡天数不足 7 天 → null
+  const sparse: Record<string, { status: string; rpe: number }> = { [day(-1)]: comp('full'), [day(-2)]: comp('full') };
+  assert(computeACWR(plan40, sparse, asOf) === null, 'ACWR: 不足 7 天打卡 → null');
+
+  // 窗口外（>28 天前）的课不参与：窗口外 12 天全跑 + 急性 7 天 → 慢性只计急性
+  const windowOnly: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -39; i <= -28; i++) windowOnly[day(i)] = comp('full');
+  for (let i = -6; i <= 0; i++) windowOnly[day(i)] = comp('full');
+  const rWindow = computeACWR(plan40, windowOnly, asOf);
+  // 若窗口外参与：慢性 = (120+70)/4 = 47.5 → 1.47；排除后 70/17.5 = 4.0
+  assert(rWindow !== null && Math.abs(rWindow.acwr - 4) < 0.01, 'ACWR: 28 天窗口外不参与');
+
+  // 慢性均值 < 0.5 → null
+  const tiny: Record<string, { status: string; rpe: number }> = {};
+  for (let i = -7; i <= -1; i++) tiny[day(i)] = comp('full');
+  const planTiny: DailyWorkout[] = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(asOf);
+    d.setDate(d.getDate() - 13 + i);
+    return { date: d, workoutType: 'Easy', description: 'e', distanceKm: 0.5 };
+  });
+  const rTiny = computeACWR(planTiny, tiny, asOf);
+  assert(rTiny === null || rTiny.chronicAvgKm >= 0.5, 'ACWR: 慢性过低不显示');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

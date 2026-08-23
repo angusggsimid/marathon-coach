@@ -25,8 +25,7 @@
 
 import { format } from 'date-fns';
 import type { DailyWorkout } from './training-engine';
-import type { MyRace, MyRaceGoal } from '../store/useStore';
-import type { MyRaceDistance } from '../store/useStore';
+import type { MyRace, MyRaceGoal, MyRaceDistance, Vacation } from '../store/useStore';
 // NOTE: No longer importing RACES seed data — we use myRace.date/name directly
 // so crawler races are supported alongside seed races.
 
@@ -311,3 +310,60 @@ export const GOAL_DISPLAY: Record<MyRaceGoal, { label: string; color: string; bg
 };
 
 export { TAPER_DAYS, RECOVERY_DAYS };
+
+
+export function applyVacationOverlay(plan: DailyWorkout[], vacations: Vacation[]): DailyWorkout[] {
+  if (vacations.length === 0) return plan;
+
+  return plan.map(workout => {
+    if (workout.workoutType === 'Race') return workout; // never override race days
+
+    const dateStr = format(workout.date, 'yyyy-MM-dd');
+
+    for (const vac of vacations) {
+      // ── During vacation ────────────────────────────────────────────────────
+      if (dateStr >= vac.start && dateStr <= vac.end) {
+        return {
+          ...workout,
+          workoutType: 'Rest',
+          distanceKm:  0,
+          description: `休假${vac.label ? ' · ' + vac.label : ''}`,
+          details:     undefined,
+        };
+      }
+
+      // ── Return-to-training period ──────────────────────────────────────────
+      if (workout.workoutType === 'Rest') continue; // rest days need no further mod
+
+      const gapMs    = new Date(vac.end).getTime() - new Date(vac.start).getTime();
+      const gapDays  = Math.round(gapMs / 86400000) + 1;
+      const afterMs  = new Date(dateStr).getTime() - new Date(vac.end).getTime();
+      const daysAfter = Math.round(afterMs / 86400000);
+
+      if (daysAfter <= 0) continue;
+
+      let returnFactor = 1.0;
+      let returnWindow = 0;
+      if (gapDays <= 7) {
+        continue; // ≤1 week: no reduction
+      } else if (gapDays <= 14) {
+        returnFactor = 0.85; returnWindow = 7;
+      } else if (gapDays <= 28) {
+        returnFactor = 0.75; returnWindow = 14;
+      } else {
+        returnFactor = 0.60; returnWindow = 21;
+      }
+
+      if (daysAfter <= returnWindow) {
+        const reduction = Math.round((1 - returnFactor) * 100);
+        return {
+          ...workout,
+          distanceKm:  Math.round((workout.distanceKm ?? 0) * returnFactor * 10) / 10,
+          description: `${workout.description}【复训第${daysAfter}天·减量${reduction}%】`,
+        };
+      }
+    }
+
+    return workout;
+  });
+}

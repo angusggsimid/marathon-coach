@@ -13,6 +13,7 @@ import { ActivityDetail } from './ActivityDetail';
 import { HrAnalysis } from './HrAnalysis';
 import { SleepRecovery } from './SleepRecovery';
 import { ActivityOverview } from './ActivityOverview';
+import AutoCheckinBanner from './AutoCheckinBanner';
 
 export default function InsightsTab() {
   const {
@@ -73,6 +74,7 @@ export default function InsightsTab() {
         <div className="mt-4 pt-4 border-t border-[var(--color-separator)]">
           <ManualImport onImport={importCorosSnapshot} />
         </div>
+        <AutoCheckinBanner />
         {corosSnapshot && <SnapshotDashboard />}
       </div>
     );
@@ -132,6 +134,8 @@ export default function InsightsTab() {
           <p className="text-[11.5px] text-[var(--color-red)] mt-2">同步失败：{syncError}</p>
         )}
       </div>
+
+      <AutoCheckinBanner />
 
       {corosSnapshot ? (
         <SnapshotDashboard />

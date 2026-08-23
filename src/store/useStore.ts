@@ -16,6 +16,10 @@ import {
   type FitExportRange,
 } from '../utils/plan-fingerprint';
 import {
+  buildAutoCheckinSuggestionsFromAppState,
+  type AutoCheckinSuggestion,
+} from '../utils/auto-checkin';
+import {
   toRestorableState,
   type BackupData,
 } from '../utils/backup';
@@ -130,6 +134,8 @@ interface AppState {
   exportSync: ExportSyncState;
   /** COROS 实测数据快照（洞察 Tab 数据源；单独键持久化，不入主 persist） */
   corosSnapshot: CorosSnapshot | null;
+  /** 自动打卡建议（同步/导入后由活动↔计划匹配产出；用户确认后应用，不入 persist） */
+  autoCheckinSuggestions: AutoCheckinSuggestion[];
   /** COROS 授权（token 单独键持久化，不入主 persist） */
   corosAuth: CorosAuth | null;
   /** 上次 COROS 同步时间（ISO） */
@@ -175,6 +181,10 @@ interface AppState {
   importCorosSnapshot: (data: unknown) => string | null;
   /** 清除 COROS 快照 */
   clearCorosSnapshot: () => void;
+  /** 应用全部自动打卡建议（只写缺失日期，不覆盖手动记录），然后清空 */
+  applyAutoCheckins: () => void;
+  /** 忽略本次建议 */
+  dismissAutoCheckins: () => void;
   /**
    * 一键校准：把 COROS 实测写入档案（仅 ltPace/lthr）并用引擎重算计划。
    * 引擎守卫返回空计划时保留旧计划并置 planNeedsRegen。
@@ -269,6 +279,7 @@ export const useStore = create<AppState>()(
       vacations: [],
       exportSync: {},
       corosSnapshot: loadCorosSnapshot(),
+      autoCheckinSuggestions: [],
       corosAuth: loadCorosAuth(),
       corosLastSyncAt: null,
       corosSyncIntervalDays: 3,
@@ -321,6 +332,7 @@ export const useStore = create<AppState>()(
           isPlanGenerated: slice.isPlanGenerated,
           planNeedsRegen: slice.planNeedsRegen,
           exportSync: slice.exportSync,
+          autoCheckinSuggestions: [],
           // 不恢复备份中的 activeTab：固定档案页，避免成功反馈因跳转消失
           activeTab: 'profile',
         }));
@@ -334,16 +346,29 @@ export const useStore = create<AppState>()(
           set({ plan: [], isPlanGenerated: false, planNeedsRegen: false });
           return;
         }
-        set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'calendar' });
+        set({ plan, isPlanGenerated: true, planNeedsRegen: false, activeTab: 'calendar', autoCheckinSuggestions: [] });
       },
 
       importCorosSnapshot: (data) => {
         const result = parseSnapshot(data);
         if (!result.ok) return result.error;
-        const { corosLastSyncAt } = get();
+        const {
+          corosLastSyncAt, plan, completions, myRaces, vacations,
+          profile, adaptationOverride, sessionOverride,
+        } = get();
+        // 先基于新快照算客观裁决，再按生效计划口径算自动打卡建议
+        const objective = computeObjective(result.snapshot, corosLastSyncAt);
+        const autoCheckinSuggestions = buildAutoCheckinSuggestionsFromAppState({
+          plan, completions, myRaces, vacations, profile,
+          corosSnapshot: result.snapshot,
+          objective,
+          override: adaptationOverride,
+          sessionOverride,
+        });
         set({
           corosSnapshot: result.snapshot,
-          corosObjective: computeObjective(result.snapshot, corosLastSyncAt),
+          autoCheckinSuggestions,
+          corosObjective: objective,
           corosLoadRatio: computeLoadRatio(result.snapshot, corosLastSyncAt),
         });
         try {
@@ -353,9 +378,21 @@ export const useStore = create<AppState>()(
       },
 
       clearCorosSnapshot: () => {
-        set({ corosSnapshot: null });
+        set({ corosSnapshot: null, autoCheckinSuggestions: [] });
         try { localStorage.removeItem(COROS_SNAPSHOT_KEY); } catch { /* 忽略 */ }
       },
+
+      applyAutoCheckins: () => {
+        const { autoCheckinSuggestions, completions } = get();
+        const next = { ...completions };
+        for (const s of autoCheckinSuggestions) {
+          // 防御：只写缺失日期，绝不覆盖手动记录
+          if (!next[s.dateStr]) next[s.dateStr] = { status: s.status, rpe: s.rpe };
+        }
+        set({ completions: next, autoCheckinSuggestions: [] });
+      },
+
+      dismissAutoCheckins: () => set({ autoCheckinSuggestions: [] }),
 
       applyCorosCalibration: (patch) => {
         const applied: string[] = [];
@@ -373,7 +410,7 @@ export const useStore = create<AppState>()(
         const profile = { ...get().profile, ...updates };
         const plan = generateTrainingPlan(profile);
         if (plan.length > 0) {
-          set({ profile, plan, isPlanGenerated: true, planNeedsRegen: false });
+          set({ profile, plan, isPlanGenerated: true, planNeedsRegen: false, autoCheckinSuggestions: [] });
           return { applied, planRegenerated: true };
         }
         // 引擎守卫拦截：只补档案，计划交回用户手动重生成
@@ -480,11 +517,12 @@ export const useStore = create<AppState>()(
         const {
           corosAuth: _omitAuth,
           corosSnapshot: _omitSnapshot,
+          autoCheckinSuggestions: _omitCheckins,
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
           completions, myRaces, vacations, exportSync,
           corosLastSyncAt, corosSyncIntervalDays, adaptationOverride, sessionOverride,
         } = state;
-        void _omitAuth; void _omitSnapshot;
+        void _omitAuth; void _omitSnapshot; void _omitCheckins;
         return {
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
           completions, myRaces, vacations, exportSync,
