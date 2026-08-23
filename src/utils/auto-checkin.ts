@@ -7,6 +7,7 @@ import { applySessionReadiness, sessionReadiness } from './insights/readiness';
 import { applyWeeklyAdaptation, type ObjectiveAdaptation, type AdaptationOverride } from './weekly-adaptation';
 import type { CompletionEntry } from './weekly-adaptation';
 import { applyRaceOverlays, applyVacationOverlay } from './race-plan-overlay';
+import { QUALITY_TE_TYPES, teStats, judgeTeQuality } from './te-quality';
 import type { MyRace, Vacation } from '../store/useStore';
 
 /**
@@ -20,9 +21,7 @@ export const AUTO_RUN_TYPES = new Set([
 ]);
 
 /** 质量课：有目标配速的课，匹配时需配速门验证（Easy/LSD/Recovery/Race 只看距离） */
-const PACE_GATED_TYPES = new Set([
-  'Tempo', 'TempoIntervals', 'Interval', 'Hills', 'Fartlek', 'MP', 'Cruise', 'Progression',
-]);
+const PACE_GATED_TYPES = QUALITY_TE_TYPES;
 
 /** 活动平均配速比目标区间慢端慢超过 25% → 视为未按课执行 */
 const PACE_TOLERANCE = 1.25;
@@ -38,6 +37,8 @@ export interface AutoCheckinSuggestion {
   status: AutoCheckinStatus;
   /** 按配速相对目标区间映射（partial=1；质量课快/区间内/偏慢=3/2/1；轻松课=2）；用户可改 */
   rpe: 1 | 2 | 3;
+  /** TE 相对基线的判定说明（强度不足已降 partial；偏硬保持 full 仅提示） */
+  teNote?: string;
   activityName?: string;
 }
 
@@ -87,8 +88,10 @@ function rpeFromPace(
 export function matchActivitiesToPlan(
   plan: DailyWorkout[],
   activities: ActualActivity[],
+  asOf: Date = new Date(),
 ): AutoCheckinSuggestion[] {
   const suggestions: AutoCheckinSuggestion[] = [];
+  const stats = teStats(activities, asOf);
 
   for (const workout of plan) {
     if (!AUTO_RUN_TYPES.has(workout.workoutType)) continue;
@@ -131,6 +134,14 @@ export function matchActivitiesToPlan(
       }
     }
 
+    // TE 门：生理刺激相对个人基线验证（配速是输出，TE 是刺激）
+    let teNote: string | undefined;
+    if (status === 'full') {
+      const j = judgeTeQuality(workout.workoutType, 'full', best.aerobicTe ?? null, stats);
+      if (j.judgment === 'under-stimulus') { status = 'partial'; teNote = j.note; }
+      else if (j.judgment === 'over-cooked') { teNote = j.note; }
+    }
+
     suggestions.push({
       dateStr,
       workoutType: workout.workoutType,
@@ -138,6 +149,7 @@ export function matchActivitiesToPlan(
       actualKm,
       status,
       rpe: rpeFromPace(status, workout, best.avgPaceSec),
+      teNote,
       activityName: best.name,
     });
   }
@@ -150,8 +162,9 @@ export function buildAutoCheckinSuggestions(
   plan: DailyWorkout[],
   activities: ActualActivity[],
   existingCompletions: Record<string, CompletionEntry> = {},
+  asOf: Date = new Date(),
 ): AutoCheckinSuggestion[] {
-  return matchActivitiesToPlan(plan, activities).filter(
+  return matchActivitiesToPlan(plan, activities, asOf).filter(
     s => !existingCompletions[s.dateStr],
   );
 }
@@ -201,5 +214,5 @@ export function buildAutoCheckinSuggestionsFromAppState(
     input.sessionOverride,
   );
   const activities = input.corosSnapshot?.activities ?? [];
-  return buildAutoCheckinSuggestions(gated.plan, activities, completions);
+  return buildAutoCheckinSuggestions(gated.plan, activities, completions, asOf);
 }

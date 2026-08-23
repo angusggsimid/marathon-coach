@@ -33,6 +33,7 @@ export default function AutoCheckinBanner() {
             {s.status === 'partial' && <span className="ml-1 text-[var(--color-orange)]">部分</span>}
             <span className="mx-1.5 text-[var(--color-label-3)]">·</span>
             实际 {s.actualKm}km / 计划 {s.plannedKm}km
+            {s.teNote && <span className="block mt-0.5 text-[10px] text-[var(--color-orange)] leading-relaxed">{s.teNote}</span>}
           </li>
         ))}
         {autoCheckinSuggestions.length > 4 && (

@@ -311,6 +311,41 @@ export const GOAL_DISPLAY: Record<MyRaceGoal, { label: string; color: string; bg
 
 export { TAPER_DAYS, RECOVERY_DAYS };
 
+/**
+ * 双减量保护窗口内被抑制的次赛事（与 applyRaceOverlays 的 guard 同口径）。
+ * 用于 UI 显式告知：这些赛事不会注入 Race 日/减量/恢复，按普通训练日处理。
+ */
+export interface SuppressedRace {
+  raceId: string;
+  name?: string;
+  date: string;
+  daysFromPrimary: number;
+}
+
+export function getSuppressedRaces(
+  myRaces: MyRace[],
+  primaryRaceDateStr: string,
+  primaryRaceType?: 'full' | 'half',
+): SuppressedRace[] {
+  if (!primaryRaceDateStr) return [];
+  const guardDays = primaryRaceType === 'half' ? 14 : 21;
+  const primaryMs = new Date(primaryRaceDateStr).getTime();
+  if (Number.isNaN(primaryMs)) return [];
+
+  const out: SuppressedRace[] = [];
+  for (const mr of myRaces) {
+    if (!mr.date || mr.dateTBD) continue;
+    if (mr.date === primaryRaceDateStr) continue; // 主赛自身
+    const ms = new Date(mr.date).getTime();
+    if (Number.isNaN(ms)) continue;
+    const days = Math.abs(Math.round((ms - primaryMs) / 86400000));
+    if (days > 0 && days <= guardDays) {
+      out.push({ raceId: mr.raceId, name: mr.name, date: mr.date, daysFromPrimary: days });
+    }
+  }
+  return out.sort((a, b) => a.daysFromPrimary - b.daysFromPrimary);
+}
+
 
 export function applyVacationOverlay(plan: DailyWorkout[], vacations: Vacation[]): DailyWorkout[] {
   if (vacations.length === 0) return plan;

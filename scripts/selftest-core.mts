@@ -100,6 +100,8 @@ import {
 } from '../src/utils/auto-checkin.ts';
 import { countStreak } from '../src/utils/checkin-streak.ts';
 import { computeACWR } from '../src/utils/acwr.ts';
+import { getSuppressedRaces } from '../src/utils/race-plan-overlay.ts';
+import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
 
 let passed = 0;
 let failed = 0;
@@ -1911,6 +1913,113 @@ console.log('\n── ACWR：打卡实测口径 ──');
   });
   const rTiny = computeACWR(planTiny, tiny, asOf);
   assert(rTiny === null || rTiny.chronicAvgKm >= 0.5, 'ACWR: 慢性过低不显示');
+}
+
+console.log('\n── 赛事冲突显式提示：双减量保护窗口 ──');
+{
+  const race = (id: string, date: string, name?: string) => ({
+    raceId: id, distance: 'full' as const, goal: 'pb' as const,
+    addedAt: 'x', date, ...(name ? { name } : {}),
+  });
+  const primary = race('p1', '2026-11-09', '主赛');
+
+  // 窗口内（15 天）→ 被抑制
+  const r1 = getSuppressedRaces([primary, race('b1', '2026-10-25', 'B赛')], '2026-11-09', 'full');
+  assert(r1.length === 1 && r1[0].raceId === 'b1' && r1[0].daysFromPrimary === 15, '冲突: 窗口内被抑制');
+
+  // 边界：恰好 21 天 → 抑制（与 overlay 的 <= 一致）
+  const r2 = getSuppressedRaces([primary, race('b2', '2026-10-19')], '2026-11-09', 'full');
+  assert(r2.length === 1 && r2[0].daysFromPrimary === 21, '冲突: 恰好 21 天边界');
+
+  // 窗口外（28 天）→ 不抑制
+  const r3 = getSuppressedRaces([primary, race('b3', '2026-10-12')], '2026-11-09', 'full');
+  assert(r3.length === 0, '冲突: 窗口外不抑制');
+
+  // 半马窗口 14 天：13 天抑制、15 天不抑制
+  const r4 = getSuppressedRaces([race('p2', '2026-11-09'), race('b4', '2026-10-27')], '2026-11-09', 'half');
+  const r5 = getSuppressedRaces([race('p2', '2026-11-09'), race('b5', '2026-10-25')], '2026-11-09', 'half');
+  assert(r4.length === 1 && r5.length === 0, '冲突: 半马窗口 14 天');
+
+  // 主赛本身不出现
+  const r6 = getSuppressedRaces([primary], '2026-11-09', 'full');
+  assert(r6.length === 0, '冲突: 主赛自身不出现');
+
+  // 无主赛日期 → 空
+  const r7 = getSuppressedRaces([race('b6', '2026-10-25')], '', 'full');
+  assert(r7.length === 0, '冲突: 无主赛返回空');
+
+  // dateTBD / 无日期跳过
+  const r8 = getSuppressedRaces(
+    [primary, { ...race('b7', '2026-10-20'), dateTBD: true }, { ...race('b8', ''), dateTBD: false }],
+    '2026-11-09', 'full',
+  );
+  assert(r8.length === 0, '冲突: dateTBD/无日期跳过');
+}
+
+console.log('\n── TE 执行质量验证 ──');
+{
+  const asOf = new Date('2026-08-23T04:00:00Z');
+  const day = (offset: number) => {
+    const d = new Date(asOf);
+    d.setDate(d.getDate() + offset);
+    return format(d, 'yyyy-MM-dd');
+  };
+  // 8 次跑步，TE 分布 [1.5, 2.0, 2.5, 3.0, 3.2, 3.4, 4.0, 4.2]
+  const teRuns = [1.5, 2.0, 2.5, 3.0, 3.2, 3.4, 4.0, 4.2].map((te, i) => ({
+    date: day(-(i * 3)), type: 'run', name: `r${i}`, distanceKm: 8, aerobicTe: te,
+  }));
+  const strength = { date: day(-1), type: 'strength', name: '力量', aerobicTe: 1.2 };
+
+  // 基线：过滤力量、窗口内样本
+  const stats = teStats([...teRuns, strength], asOf);
+  assert(stats !== null && stats.samples === 8, 'TE: 基线样本过滤（8 次跑步）');
+  assert(stats!.median === 3 && stats!.p25 === 2 && stats!.p75 === 3.4,
+    'TE: 中位数/分位数', `median=${stats?.median} p25=${stats?.p25} p75=${stats?.p75}`);
+
+  // 样本不足（<5）→ null
+  assert(teStats(teRuns.slice(0, 3), asOf) === null, 'TE: 样本 <5 → null');
+
+  // 窗口外（>28 天）不参与
+  const oldRun = { date: day(-40), type: 'run', name: 'old', distanceKm: 8, aerobicTe: 9 };
+  const s2 = teStats([oldRun, ...teRuns.slice(0, 7)], asOf);
+  assert(s2!.samples === 7, 'TE: 28 天窗口外不参与');
+
+  // 判定：质量课 TE 低于 p25 → 强度不足
+  const q = judgeTeQuality('Tempo', 'full', 1.5, stats!);
+  assert(q.judgment === 'under-stimulus', 'TE: 质量课低刺激判不足');
+  // 质量课中位附近 → 达标
+  assert(judgeTeQuality('Tempo', 'full', 3.0, stats!).judgment === 'on-target', 'TE: 质量课达标');
+  // 轻松课 TE 高于 p75 → 偏硬
+  assert(judgeTeQuality('Easy', 'full', 4.2, stats!).judgment === 'over-cooked', 'TE: 轻松课偏硬');
+  // 轻松课低 TE → 正常
+  assert(judgeTeQuality('LSD', 'full', 2.0, stats!).judgment === 'on-target', 'TE: 轻松课正常');
+  // partial 不判定
+  assert(judgeTeQuality('Tempo', 'partial', 2.0, stats!).judgment === 'on-target', 'TE: partial 不判定');
+  // Race 不做偏硬判定
+  assert(judgeTeQuality('Race', 'full', 4.5, stats!).judgment === 'on-target', 'TE: Race 不判偏硬');
+  // 无基线 → on-target
+  assert(judgeTeQuality('Tempo', 'full', 2.0, null).judgment === 'on-target', 'TE: 无基线不判定');
+
+  // 集成：matchActivitiesToPlan 的 TE 门
+  const planTe: DailyWorkout[] = [
+    { date: parseLocalDate('2026-08-22'), workoutType: 'Tempo', description: 't', distanceKm: 8, targetPace: "4'26\"-4'50\"" },
+    { date: parseLocalDate('2026-08-21'), workoutType: 'Easy', description: 'e', distanceKm: 8 },
+  ];
+  // Tempo 配速达标但 TE 只有 1.2（含自身在内 9 样本，p25=2.0）→ 降 partial + 理由
+  const rLow = matchActivitiesToPlan(planTe, [
+    ...teRuns.map(r => ({ date: day(-(teRuns.indexOf(r) * 3)), type: 'run', name: r.name, distanceKm: 8, aerobicTe: r.aerobicTe })),
+    { date: '2026-08-22', type: 'run', name: 'tempo日', distanceKm: 7.9, avgPaceSec: 280, aerobicTe: 1.2 },
+  ]);
+  const tempoSug = rLow.find(s => s.dateStr === '2026-08-22');
+  assert(tempoSug?.status === 'partial' && (tempoSug.teNote ?? '').includes('强度不足'),
+    'TE集成: Tempo 低 TE 降 partial', JSON.stringify(tempoSug));
+  // Easy TE 高于 p75 → 保持 full + 偏硬提示
+  const rHigh = matchActivitiesToPlan(planTe, [
+    ...teRuns.map(r => ({ date: day(-(teRuns.indexOf(r) * 3)), type: 'run', name: r.name, distanceKm: 8, aerobicTe: r.aerobicTe })),
+    { date: '2026-08-21', type: 'run', name: 'easy日', distanceKm: 8.1, aerobicTe: 4.2 },
+  ]);
+  const easySug = rHigh.find(s => s.dateStr === '2026-08-21');
+  assert(easySug?.status === 'full' && (easySug.teNote ?? '').includes('偏硬'), 'TE集成: Easy 高 TE 提示但保持 full');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

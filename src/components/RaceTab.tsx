@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useStore } from '../store/useStore';
+import { getSuppressedRaces } from '../utils/race-plan-overlay';
 import type { MyRace, MyRaceGoal, MyRaceDistance } from '../store/useStore';
 import { RACES as SEED_RACES } from '../data/races';
 
@@ -349,6 +350,10 @@ export function RaceTab() {
 
   // Keep prevPrimaryRef current — updated via store profile
   const { profile: storeProfile } = useStore();
+  // 双减量保护窗口内的次赛 → UI 显式告知（不再静默忽略）
+  const suppressedMap = useMemo(() => new Map(
+    getSuppressedRaces(myRaces, storeProfile.raceDate, storeProfile.raceType).map(x => [x.raceId, x]),
+  ), [myRaces, storeProfile.raceDate, storeProfile.raceType]);
   useEffect(() => { prevPrimaryRef.current = storeProfile.raceDate; }, [storeProfile.raceDate]);
 
   const handleSave = () => {
@@ -627,6 +632,15 @@ export function RaceTab() {
                         {city ? ` · ${city}` : ''}
                         {' · '}{DIST_LABEL[mr.distance]}
                       </p>
+                      {(() => {
+                        const sup = suppressedMap.get(mr.raceId);
+                        if (!sup) return null;
+                        return (
+                          <p className="text-[10px] text-[var(--color-orange)] mt-1 leading-relaxed">
+                            距主赛 {sup.daysFromPrimary} 天 · 已按普通训练处理（避免双重减量）
+                          </p>
+                        );
+                      })()}
                     </div>
                     {isLiveOpen && regUrl && (
                       <a
