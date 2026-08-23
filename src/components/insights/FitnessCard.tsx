@@ -28,6 +28,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { weeklyVolume } from '../../utils/insights/metrics';
 import { formatPace } from '../../utils/insights/format';
+import ScienceNote from '../ScienceNote';
 
 // VO2max 分档（跑者人群，参考 Daniels 表）
 function vo2maxTier(v: number): { label: string; color: string } {
@@ -133,6 +134,8 @@ export function FitnessCard({ snapshot }: { snapshot: CorosSnapshot }) {
           ) : (
             <p className="text-[12px] text-[var(--color-label-3)]">快照中没有比赛预测数据</p>
           )}
+          <ScienceNote id="calibration" label="预测是怎么校准的？" />
+          <ScienceNote id="vdot" />
           <p className="text-[10.5px] text-[var(--color-label-3)] mt-3 leading-relaxed">
             VO₂max 与预测为手表当前值。COROS 未开放历史体能趋势数据，暂无法绘制时间轴。
           </p>

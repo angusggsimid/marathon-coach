@@ -105,6 +105,7 @@ import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
 import { heatAdjustment } from '../src/utils/heat-adjust.ts';
 import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
 import { calibratePrediction, formatPredictionDelta } from '../src/utils/prediction-calibration.ts';
+import { SCIENCE_NOTES } from '../src/content/science-notes.ts';
 
 let passed = 0;
 let failed = 0;
@@ -2165,6 +2166,24 @@ console.log('\n── 预测偏差自学习 ──');
     withBad2.data.myRaces[0].resultTime = '3h42m';
     assert(parseBackupJson(JSON.stringify(withBad2)).ok === false, '备份: 非法 resultTime 拒绝');
   }
+}
+
+console.log('\n── 科普层内容完整性 ──');
+{
+  const ids = Object.keys(SCIENCE_NOTES);
+  assert(ids.length >= 12, `科普: 覆盖 ≥12 主题（实际 ${ids.length}）`);
+  let bad = '';
+  for (const id of ids) {
+    const n = SCIENCE_NOTES[id as keyof typeof SCIENCE_NOTES];
+    if (!n.title || n.title.length < 6) bad += `${id}.title `;
+    for (const f of ['what', 'why', 'science', 'individuality', 'action'] as const) {
+      if (!n[f] || (n[f] as string).length < 20) bad += `${id}.${f} `;
+    }
+    if (!Array.isArray(n.misconceptions) || n.misconceptions.length < 1 || n.misconceptions.some(m => m.length < 10)) {
+      bad += `${id}.misconceptions `;
+    }
+  }
+  assert(bad === '', '科普: 所有主题六段式完整', bad);
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

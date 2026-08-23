@@ -5,6 +5,7 @@ import { CHART } from '../../utils/insights/theme';
 import { ZONE_COLORS, ZONE_LABELS } from '../../utils/insights/zones';
 import { seilerDistribution, zoneDistribution } from '../../utils/insights/metrics';
 import { paceStabilityInsight, seilerInsight } from '../../utils/insights/insights';
+import ScienceNote from '../ScienceNote';
 
 export function SeilerCard({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const lt = snapshot.fitness?.ltPaceSec;
@@ -51,6 +52,7 @@ export function SeilerCard({ id, snapshot }: { id?: string; snapshot: CorosSnaps
       ) : (
         <p className="text-[12px] text-[var(--color-label-3)] py-6 text-center">近 4 周跑量不足 10 km，无法计算强度分布</p>
       )}
+      <ScienceNote id="seiler" />
     </SectionCard>
   );
 }

@@ -5,6 +5,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { hrvTrendInsight } from '../../utils/insights/insights';
 import { formatPace } from '../../utils/insights/format';
+import ScienceNote from '../ScienceNote';
 
 export function HrAnalysis({ snapshot }: { snapshot: CorosSnapshot }) {
   const metrics = snapshot.dailyMetrics;
@@ -144,6 +145,7 @@ export function HrAnalysis({ snapshot }: { snapshot: CorosSnapshot }) {
           <div ref={radarRef} className="w-full h-[190px]" />
         </>
       )}
+      <ScienceNote id="hrv" />
     </SectionCard>
   );
 }

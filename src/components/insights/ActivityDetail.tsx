@@ -3,6 +3,7 @@ import type { ActualActivity, CorosSnapshot } from '../../utils/insights/types';
 import { SectionCard } from './SectionCard';
 import { paceToZone, ZONE_COLORS } from '../../utils/insights/zones';
 import { formatDuration, formatPace } from '../../utils/insights/format';
+import ScienceNote from '../ScienceNote';
 
 export function ActivityDetail({ snapshot }: { snapshot: CorosSnapshot }) {
   const lt = snapshot.fitness?.ltPaceSec;
@@ -74,6 +75,7 @@ export function ActivityDetail({ snapshot }: { snapshot: CorosSnapshot }) {
               <p className="text-[10px] text-[var(--color-label-3)] mt-1">每公里配速柱（颜色 = 落区，越高越快）</p>
             </div>
           )}
+        <ScienceNote id="te" />
         </div>
       )}
       </details>

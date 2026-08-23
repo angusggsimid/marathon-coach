@@ -5,6 +5,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { decouplingSeries } from '../../utils/insights/metrics';
 import { decouplingInsight } from '../../utils/insights/insights';
+import ScienceNote from '../ScienceNote';
 
 function driftColor(pct: number): string {
   if (pct < 5) return CHART.accent;
@@ -64,6 +65,7 @@ export function DecouplingChart({ snapshot }: { snapshot: CorosSnapshot }) {
       ) : (
         <p className="text-[12px] text-[var(--color-label-3)] py-6 text-center">没有带分圈数据的跑步，无法计算心率漂移</p>
       )}
+      <ScienceNote id="decoupling" />
     </SectionCard>
   );
 }

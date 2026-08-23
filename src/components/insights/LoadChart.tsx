@@ -4,6 +4,7 @@ import { SectionCard } from './SectionCard';
 import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { loadInsight } from '../../utils/insights/insights';
+import ScienceNote from '../ScienceNote';
 
 export function LoadChart({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const insight = useMemo(() => loadInsight(snapshot.dailyMetrics), [snapshot]);
@@ -81,6 +82,7 @@ export function LoadChart({ id, snapshot }: { id?: string; snapshot: CorosSnapsh
       ) : (
         <p className="text-[12px] text-[var(--color-label-3)] py-6 text-center">快照中没有负荷数据</p>
       )}
+      <ScienceNote id="load" />
     </SectionCard>
   );
 }

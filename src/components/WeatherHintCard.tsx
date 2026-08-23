@@ -9,6 +9,7 @@ import {
 } from '../utils/weather';
 import { heatAdjustment } from '../utils/heat-adjust';
 import type { DailyWorkout } from '../utils/training-engine';
+import ScienceNote from './ScienceNote';
 
 /**
  * 高温执行提示卡（R2）：一次性 opt-in 定位 → 每日静默刷新预报。
@@ -81,11 +82,14 @@ export default function WeatherHintCard({ plan }: { plan: DailyWorkout[] }) {
       <div className="px-4 pb-3" data-testid="weather-hint">
         <div className="rounded-xl bg-[var(--color-orange)]/10 px-3 py-2 space-y-1">
           {hints.map(({ key, w, wd, adv }) => (
-            <p key={key} className="text-[11.5px] text-[var(--color-label-2)] leading-relaxed">
-              <span className="font-semibold text-[var(--color-orange)]">🌡 {dayName(key)} {w.workoutType} · 最高 {wd.tempMaxC}°C</span>
-              {' '}→ 配速建议 +{adv.paceAddSecPerKm}s/km，{adv.advice}
-              <span className="block text-[9.5px] text-[var(--color-label-4)] mt-0.5">天气数据来自 open-meteo · 仅供参考</span>
-            </p>
+            <div key={key}>
+              <p className="text-[11.5px] text-[var(--color-label-2)] leading-relaxed">
+                <span className="font-semibold text-[var(--color-orange)]">🌡 {dayName(key)} {w.workoutType} · 最高 {wd.tempMaxC}°C</span>
+                {' '}→ 配速建议 +{adv.paceAddSecPerKm}s/km，{adv.advice}
+                <span className="block text-[9.5px] text-[var(--color-label-4)] mt-0.5">天气数据来自 open-meteo · 仅供参考</span>
+              </p>
+              <ScienceNote id="heat" label="为什么高温要降速？" />
+            </div>
           ))}
         </div>
       </div>

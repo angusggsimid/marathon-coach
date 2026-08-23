@@ -11,6 +11,7 @@ import { resolveVDOT, predictTime, timeToSeconds } from '../utils/training-engin
 import type { MyRace, MyRaceGoal, MyRaceDistance } from '../store/useStore';
 import { RACES as SEED_RACES } from '../data/races';
 import { format } from 'date-fns';
+import ScienceNote from './ScienceNote';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -739,6 +740,9 @@ export function RaceTab() {
                   </div>
                 );
               })}
+            </div>
+            <div className="mt-3">
+              <ScienceNote id="taper" label="减量期怎么安排？（Taper 科学）" />
             </div>
           </div>
         )}

@@ -7,6 +7,7 @@ import { getCheckInMessage } from '../utils/checkin-messages';
 import { countStreak } from '../utils/checkin-streak';
 import { computeACWR } from '../utils/acwr';
 import WeatherHintCard from './WeatherHintCard';
+import ScienceNote from './ScienceNote';
 import type { CheckInMessage } from '../utils/checkin-messages';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy, ChevronDown } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
@@ -1105,6 +1106,7 @@ export function CalendarView() {
               >
                 否决降级（按原强度课执行）
               </button>
+              <ScienceNote id="readiness" label="为什么会降级？（恢复科学）" />
             </div>
           )}
           {sessionGate.overridden && (
@@ -1659,6 +1661,7 @@ function ACWRCard({ plan, completions }: { plan: DailyWorkout[]; completions: Re
               ? '来自手表近 7 天负荷'
               : `来自打卡（${result?.assumedDays ?? 0} 天未打卡按 0 计）`} · {zone.advice}
           </p>
+          <ScienceNote id="acwr" />
         </div>
         {acuteKm !== undefined && chronicAvgKm !== undefined && (
           <div className="text-right space-y-1">

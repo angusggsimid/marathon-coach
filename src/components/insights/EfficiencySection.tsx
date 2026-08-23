@@ -5,6 +5,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { efficiencyFactorSeries } from '../../utils/insights/metrics';
 import { efTrendInsight } from '../../utils/insights/insights';
+import ScienceNote from '../ScienceNote';
 
 export function EfficiencySection({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const lt = snapshot.fitness?.ltPaceSec;
@@ -50,6 +51,7 @@ export function EfficiencySection({ id, snapshot }: { id?: string; snapshot: Cor
           没有足够的稳定有氧跑（≥5km 且配速在 Z2 或更慢）来计算 EF
         </p>
       )}
+      <ScienceNote id="ef" />
     </SectionCard>
   );
 }
