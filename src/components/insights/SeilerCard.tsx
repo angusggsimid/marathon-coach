@@ -6,7 +6,7 @@ import { ZONE_COLORS, ZONE_LABELS } from '../../utils/insights/zones';
 import { seilerDistribution, zoneDistribution } from '../../utils/insights/metrics';
 import { paceStabilityInsight, seilerInsight } from '../../utils/insights/insights';
 
-export function SeilerCard({ snapshot }: { snapshot: CorosSnapshot }) {
+export function SeilerCard({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const lt = snapshot.fitness?.ltPaceSec;
   const runs = useMemo(() => snapshot.activities.filter((a) => a.type === 'run'), [snapshot]);
   const seiler = useMemo(() => (lt ? seilerDistribution(runs, lt, 28) : null), [runs, lt]);
@@ -18,6 +18,7 @@ export function SeilerCard({ snapshot }: { snapshot: CorosSnapshot }) {
 
   return (
     <SectionCard
+      id={id}
       title="强度分布 · Seiler 三区"
       sub="近 4 周 · 目标 ≈80% 低强度"
       insight={insight}

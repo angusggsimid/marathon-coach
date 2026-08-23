@@ -14,7 +14,7 @@ function scoreColor(score: number | undefined): string {
   return CHART.red;
 }
 
-export function SleepRecovery({ snapshot }: { snapshot: CorosSnapshot }) {
+export function SleepRecovery({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const metrics = snapshot.dailyMetrics;
   const insight = useMemo(() => recoveryInsight(metrics), [metrics]);
   const debt = useMemo(() => sleepDebt(metrics), [metrics]);
@@ -86,7 +86,7 @@ export function SleepRecovery({ snapshot }: { snapshot: CorosSnapshot }) {
   const rec = snapshot.recovery;
 
   return (
-    <SectionCard title="睡眠与恢复" sub="近 30 天" insight={insight}>
+    <SectionCard id={id} title="睡眠与恢复" sub="近 30 天" insight={insight}>
       {rec && (
         <div className="flex items-center gap-3 mb-3 bg-[var(--color-surface-2)] rounded-xl px-3 py-2.5">
           <div className="relative w-[42px] h-[42px] flex-shrink-0">

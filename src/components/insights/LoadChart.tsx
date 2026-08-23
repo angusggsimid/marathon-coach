@@ -5,7 +5,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { loadInsight } from '../../utils/insights/insights';
 
-export function LoadChart({ snapshot }: { snapshot: CorosSnapshot }) {
+export function LoadChart({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const insight = useMemo(() => loadInsight(snapshot.dailyMetrics), [snapshot]);
 
   const load = snapshot.dailyMetrics.filter((m) => m.loadShort !== undefined || m.loadLong !== undefined);
@@ -70,7 +70,7 @@ export function LoadChart({ snapshot }: { snapshot: CorosSnapshot }) {
   }, [snapshot]);
 
   return (
-    <SectionCard title="训练负荷" sub="COROS 短长期负荷 · PMC 模型" insight={insight}>
+    <SectionCard id={id} title="训练负荷" sub="COROS 短长期负荷 · PMC 模型" insight={insight}>
       {load.length > 0 ? (
         <>
           <p className="text-[11px] text-[var(--color-label-3)] mb-1">短期（疲劳）与长期（体能）负荷</p>

@@ -12,7 +12,7 @@ const CONFIDENCE_STYLE: Record<string, string> = {
 };
 const CONFIDENCE_LABEL: Record<string, string> = { high: '高置信', medium: '中置信', low: '参照' };
 
-export function CoachSection({ snapshot }: { snapshot: CorosSnapshot }) {
+export function CoachSection({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const { profile, applyCorosCalibration } = useStore();
   const [result, setResult] = useState<{ applied: string[]; planRegenerated: boolean } | null>(null);
 
@@ -33,6 +33,7 @@ export function CoachSection({ snapshot }: { snapshot: CorosSnapshot }) {
 
   return (
     <SectionCard
+      id={id}
       title="教练处方 · 训练引擎联动"
       sub="COROS 实测数据 → 引擎参数"
     >

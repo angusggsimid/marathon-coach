@@ -1052,18 +1052,54 @@ function RaceCardGroup({
   }
 
   const grouped = groupByMonth(races);
+  const monthKeys = Array.from(grouped.keys());
+  const todayKey = new Date().toISOString().slice(0, 7);
+
+  // 默认折叠早于当前月的月份（报名中/已公布的未来月保持展开）
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const mk of monthKeys) {
+      if (mk < todayKey) s.add(mk);
+    }
+    return s;
+  });
+  const allCollapsed = monthKeys.length > 0 && monthKeys.every((mk) => collapsed.has(mk));
+  const toggleMonth = (mk: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(mk)) next.delete(mk);
+      else next.add(mk);
+      return next;
+    });
+  const setAll = (collapse: boolean) => setCollapsed(collapse ? new Set(monthKeys) : new Set());
 
   return (
     <div className="space-y-3">
+      {monthKeys.length > 1 && (
+        <button
+          type="button"
+          onClick={() => setAll(!allCollapsed)}
+          className="text-[11px] text-[var(--color-label-3)] hover:text-white transition-colors px-0.5"
+        >
+          {allCollapsed ? '全部展开' : '全部收起'}
+        </button>
+      )}
       {Array.from(grouped.entries()).map(([mk, group]) => {
         const [y, m] = mk.split('-');
+        const isCollapsed = collapsed.has(mk);
         return (
           <div key={mk}>
-            <p className="text-[10px] font-semibold text-[var(--color-label-4)] uppercase tracking-wider mb-1.5 px-0.5">
-              {y}年 {parseInt(m)}月 · {group.length} 场
-            </p>
-            <div className="bg-[var(--color-surface)] rounded-2xl overflow-hidden">
-              {group.map((race, idx) => {
+            <button
+              type="button"
+              onClick={() => toggleMonth(mk)}
+              className="w-full flex items-center justify-between text-[10px] font-semibold text-[var(--color-label-4)] uppercase tracking-wider mb-1.5 px-0.5 hover:text-[var(--color-label-2)] transition-colors"
+            >
+              <span>{y}年 {parseInt(m)}月 · {group.length} 场</span>
+              {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+            {!isCollapsed && (
+              <div className="bg-[var(--color-surface)] rounded-2xl overflow-hidden">
+                {group.map((race, idx) => {
                 const mr      = myRaces.find(r => r.raceId === race.id);
                 const added   = !!mr;
                 const isOpen  = race.status === 'open';
@@ -1142,7 +1178,8 @@ function RaceCardGroup({
                   </button>
                 );
               })}
-            </div>
+              </div>
+            )}
           </div>
         );
       })}

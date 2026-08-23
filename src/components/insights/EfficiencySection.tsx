@@ -6,7 +6,7 @@ import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { efficiencyFactorSeries } from '../../utils/insights/metrics';
 import { efTrendInsight } from '../../utils/insights/insights';
 
-export function EfficiencySection({ snapshot }: { snapshot: CorosSnapshot }) {
+export function EfficiencySection({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const lt = snapshot.fitness?.ltPaceSec;
   const runs = useMemo(() => snapshot.activities.filter((a) => a.type === 'run'), [snapshot]);
   const efSeries = useMemo(() => (lt ? efficiencyFactorSeries(runs, lt) : []), [runs, lt]);
@@ -33,6 +33,7 @@ export function EfficiencySection({ snapshot }: { snapshot: CorosSnapshot }) {
 
   return (
     <SectionCard
+      id={id}
       title="有氧效率 · EF"
       sub="效率因子 = 速度÷心率 · 仅稳定有氧跑"
       insight={insight}

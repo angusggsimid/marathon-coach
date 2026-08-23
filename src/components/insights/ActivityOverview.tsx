@@ -6,7 +6,7 @@ import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
 import { dailyCalories } from '../../utils/insights/metrics';
 
-export function ActivityOverview({ snapshot }: { snapshot: CorosSnapshot }) {
+export function ActivityOverview({ id, snapshot }: { id?: string; snapshot: CorosSnapshot }) {
   const [hoverDay, setHoverDay] = useState<string | null>(null);
   const [pinnedDay, setPinnedDay] = useState<string | null>(null);
 
@@ -67,7 +67,7 @@ export function ActivityOverview({ snapshot }: { snapshot: CorosSnapshot }) {
   const activeMetric = activeDay ? metricByDate.get(activeDay) : undefined;
 
   return (
-    <SectionCard title="训练日历与能量" sub="近 90 天">
+    <SectionCard id={id} title="训练日历与能量" sub="近 90 天">
       <div>
         <div className="flex gap-[3px]">
           {grid.map((week, i) => (

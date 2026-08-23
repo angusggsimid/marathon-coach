@@ -1,7 +1,7 @@
 {
-  "name": "app",
+  "name": "marathon-coach",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -38,5 +38,18 @@
     "typescript-eslint": "^8.58.0",
     "vite": "^7.3.2",
     "vite-plugin-pwa": "^1.2.0"
-  }
+  },
+  "description": "马拉松备赛 PWA：VDOT 训练计划 + COROS 直连同步与科学解读 / Marathon race-prep PWA with COROS live sync",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/angusggsimid/marathon-coach"
+  },
+  "homepage": "https://marathon-pi-seven.vercel.app",
+  "keywords": [
+    "marathon",
+    "running",
+    "training-plan",
+    "pwa",
+    "coros"
+  ]
 }

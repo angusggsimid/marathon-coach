@@ -165,21 +165,73 @@ function SnapshotDashboard() {
         </button>
       </div>
       <div className="space-y-4">
-        <CoachSection snapshot={corosSnapshot} />
+        <InsightAnchorNav />
+        <CoachSection id="insight-rx" snapshot={corosSnapshot} />
         <div className="grid grid-cols-1 gap-4">
           <FitnessCard snapshot={corosSnapshot} />
-          <LoadChart snapshot={corosSnapshot} />
-          <div className="min-w-0"><EfficiencySection snapshot={corosSnapshot} /></div>
-          <div className="min-w-0"><SeilerCard snapshot={corosSnapshot} /></div>
+          <LoadChart id="insight-load" snapshot={corosSnapshot} />
+          <div className="min-w-0"><EfficiencySection id="insight-ef" snapshot={corosSnapshot} /></div>
+          <div className="min-w-0"><SeilerCard id="insight-seiler" snapshot={corosSnapshot} /></div>
           <div className="min-w-0"><DecouplingChart snapshot={corosSnapshot} /></div>
           <div className="min-w-0"><PaceAnalysis snapshot={corosSnapshot} /></div>
           <div className="min-w-0"><ActivityDetail snapshot={corosSnapshot} /></div>
           <HrAnalysis snapshot={corosSnapshot} />
-          <SleepRecovery snapshot={corosSnapshot} />
-          <div className="min-w-0"><ActivityOverview snapshot={corosSnapshot} /></div>
+          <SleepRecovery id="insight-recovery" snapshot={corosSnapshot} />
+          <div className="min-w-0"><ActivityOverview id="insight-activity" snapshot={corosSnapshot} /></div>
         </div>
       </div>
     </>
+  );
+}
+
+// ── 锚点导航（洞察长页面目录）────────────────────────────────────────────────
+
+const INSIGHT_ANCHORS = [
+  { id: 'insight-rx', label: '处方' },
+  { id: 'insight-load', label: '负荷' },
+  { id: 'insight-ef', label: '效率' },
+  { id: 'insight-seiler', label: '强度' },
+  { id: 'insight-recovery', label: '恢复' },
+  { id: 'insight-activity', label: '活动' },
+];
+
+function InsightAnchorNav() {
+  const [active, setActive] = useState('insight-rx');
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActive(e.target.id);
+        }
+      },
+      { rootMargin: '-70px 0px -60% 0px' },
+    );
+    for (const a of INSIGHT_ANCHORS) {
+      const el = document.getElementById(a.id);
+      if (el) obs.observe(el);
+    }
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div className="sticky top-14 z-30 -mx-4 px-4 py-2 bg-[var(--color-bg)]/85 backdrop-blur-xl border-b border-[var(--color-separator)] overflow-x-auto">
+      <div className="flex gap-1.5 min-w-max">
+        {INSIGHT_ANCHORS.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => document.getElementById(a.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={`text-[12px] px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
+              active === a.id
+                ? 'bg-[var(--color-accent)] text-black font-semibold'
+                : 'bg-[var(--color-surface-2)] text-[var(--color-label-2)] hover:text-white'
+            }`}
+          >
+            {a.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
