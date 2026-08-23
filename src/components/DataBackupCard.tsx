@@ -111,12 +111,6 @@ export function DataBackupCard() {
     if (phase.kind !== 'confirm') return;
     try {
       restoreFromBackup(phase.payload.data);
-      // 恢复后 API Key 必须为空
-      if (useStore.getState().icuApiKey) {
-        mutateMetrics(s => recordChannelOutcome(s, 'backup_import', 'fail'));
-        flash({ kind: 'error', message: '恢复异常：凭证未清空' });
-        return;
-      }
       mutateMetrics(s => recordChannelOutcome(s, 'backup_import', 'success'));
       flash({ kind: 'success', message: '恢复成功，计划与档案已更新' });
     } catch {

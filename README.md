@@ -14,7 +14,7 @@ _A marathon-prep PWA for Chinese runners: fill in your results and target race, 
 | **科学解读 / Insights** | 效率因子（EF）、有氧解耦、Seiler 80/20 强度分布、恢复雷达、睡眠负债、课级就绪门 |
 | **Garmin 导入 / Garmin Import** | 拖拽 .fit 文件即解析，执行侧指标全量支持 |
 | **赛事库 / Race Library** | 1200+ 场中国赛事，多源聚合，每日自动刷新 |
-| **导出 / Export** | 日历 ICS、FIT、Intervals.icu 同步（可选代理） |
+| **导出 / Export** | 日历 ICS、Garmin FIT |
 
 ## 🚀 线上地址 / Live Sites
 

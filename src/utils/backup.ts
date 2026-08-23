@@ -1,7 +1,7 @@
 /**
  * 计划与本地状态 JSON 备份 / 恢复。
  * - 白名单字段，拒绝任意 merge
- * - 永不导出/恢复 icuApiKey；按最小敏感原则也不含 icuAthleteId
+ * - 永不导出/恢复任何凭据；按最小敏感原则不含 icuApiKey/icuAthleteId（历史字段）
  * - 严格解析 WorkoutDetails / 日期 / URL；状态不变量
  * - 恢复不改 UI activeTab（保持档案页以便成功反馈可见）
  * - 兼容 plan.date 经 persist 变成字符串的现状
@@ -635,7 +635,7 @@ export function describeOverwriteFields(data: BackupData): string[] {
 
 /**
  * 将已校验 data 转为 store 可 set 的切片。
- * 强制 icuApiKey 清空；不写 activeTab / icuAthleteId。
+ * 不写 activeTab（恢复后固定档案页）；历史凭据字段由 containsForbiddenSecrets 拦截。
  */
 export function toRestorableState(data: BackupData): {
   profile: UserProfile;
@@ -646,7 +646,6 @@ export function toRestorableState(data: BackupData): {
   isPlanGenerated: boolean;
   planNeedsRegen: boolean;
   exportSync: ExportSyncState;
-  icuApiKey: '';
 } {
   return {
     profile: data.profile,
@@ -660,7 +659,6 @@ export function toRestorableState(data: BackupData): {
     isPlanGenerated: data.isPlanGenerated,
     planNeedsRegen: data.planNeedsRegen,
     exportSync: migrateExportSyncState(data.exportSync),
-    icuApiKey: '',
   };
 }
 

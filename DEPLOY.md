@@ -12,7 +12,7 @@
                      ↑
      GitHub Actions 每天 10:17 (北京) 刷新赛事数据
 
-另外：Cloudflare Worker (可选，用于 intervals.icu 同步功能)
+另外：无需其他外部服务
 ```
 
 **生产地址：**
@@ -135,15 +135,8 @@ CLI（验证部署状态用）：`~/.local/bin/edgeone`（登录态在 `~/.edgeo
 
 ---
 
-## 第四部分：intervals.icu 同步（当前未启用）
 
-> 2026-08-18 清理：Cloudflare Worker 代理（`cloudflare-worker.js`）从未部署且未使用，已移除。
-> intervals.icu 导出通道仍保留在应用内（可选），但因 CORS 限制浏览器直连可能失败；
-> 如将来需要，可从 git 历史恢复 worker 并按_intervals.icu 官方文档_自行部署代理。
-
----
-
-## 第五部分：PWA — 手机"添加到主屏幕"
+## 第四部分：PWA — 手机"添加到主屏幕"
 
 PWA（渐进式网页应用）已在代码中配置好，部署到 Vercel 后**自动生效**，无需额外操作。
 
@@ -186,9 +179,6 @@ A: 手动触发一次 GitHub Actions（见第三部分），或检查 `public/ra
 
 **Q: 手机无法"添加到主屏幕"**  
 A: 确保用 HTTPS 访问（Vercel 自动提供），Safari/Chrome 才有此选项
-
-**Q: intervals.icu 同步失败**  
-A: 确认 `VITE_ICU_PROXY` 环境变量已设置，且 Cloudflare Worker 已部署
 
 ---
 

@@ -7,12 +7,6 @@ import { getCheckInMessage } from '../utils/checkin-messages';
 import type { CheckInMessage } from '../utils/checkin-messages';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy, ChevronDown } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
-import {
-  ICU_IDEMPOTENT_SYNC_PROVEN,
-  ICU_RESYNC_WARNING,
-  syncPlanToICU,
-} from '../utils/intervals-icu';
-import type { ICUSyncProgress } from '../utils/intervals-icu';
 import { format, startOfWeek, addDays, addMonths, isSameMonth, isSameDay, startOfMonth, endOfMonth, endOfWeek, differenceInWeeks, isPast, isToday } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { useMemo, useState } from 'react';
@@ -32,7 +26,6 @@ import {
   buildFitRangeOptions,
   downloadFitByRange,
 } from '../utils/fit-export-range';
-import type { ICUSyncResult } from '../utils/intervals-icu';
 import { mutateMetrics, recordChannelOutcome } from '../utils/local-metrics';
 
 // ─── Check-in Modal ───────────────────────────────────────────────────────────
@@ -136,13 +129,12 @@ function CheckInModal({ workout, existing, onSave, onClose }: CheckInModalProps)
 
 // ─── Main CalendarView ────────────────────────────────────────────────────────
 
-// ICU sync view states within the export sheet
-type ICUView = 'menu' | 'fit-range' | 'setup' | 'syncing' | 'done';
+// 导出 sheet 视图状态
+type SheetView = 'menu' | 'fit-range' | 'setup' | 'syncing' | 'done';
 
 export function CalendarView() {
   const {
     profile, completions, logCompletion, getWeeklyAdaptation,
-    icuApiKey, icuAthleteId, saveICUCredentials, clearICUCredentials,
     vacations, addVacation, removeVacation, myRaces,
     exportSync, markExportSuccess, setAdaptationOverride, setSessionOverride,
   } = useStore();
@@ -178,14 +170,8 @@ export function CalendarView() {
     setTimeout(() => setQuoteToast(null), 4500);
   };
 
-  // ICU sync state
-  const [icuView, setIcuView] = useState<ICUView>('menu');
-  const [icuKeyInput, setIcuKeyInput] = useState('');
-  const [icuIdInput, setIcuIdInput] = useState('');
-  const [icuProgress, setIcuProgress] = useState<ICUSyncProgress | null>(null);
-  const [icuResult, setIcuResult] = useState<ICUSyncResult | null>(null);
-  const [icuAckDuplicate, setIcuAckDuplicate] = useState(false);
   /** 导出 sheet 内可见错误（FIT/ICS）；视图切换/关闭/重试时清理 */
+  const [sheetView, setSheetView] = useState<SheetView>('menu');
   const [exportError, setExportError] = useState<string | null>(null);
 
   const workoutCount = plan.filter(w => w.workoutType !== 'Rest').length;
@@ -198,43 +184,7 @@ export function CalendarView() {
   const fitOptions = useMemo(() => buildFitRangeOptions(plan), [plan]);
   const staleFit = isFitChannelStale(exportSync?.fit, plan);
   const staleIcs = isChannelStale(exportSync?.ics, currentPlanFp);
-  const staleIcu = isChannelStale(exportSync?.icu, currentPlanFp);
-  const hasAnyStale = staleFit || staleIcs || staleIcu;
-  const everSyncedIcu = !!exportSync?.icu?.exportedAt;
-
-  const handleICUSync = async (apiKey: string, athleteId: string) => {
-    saveICUCredentials(apiKey, athleteId);
-    setIcuView('syncing');
-    setIcuProgress({ current: 0, total: workoutCount });
-    try {
-      const result = await syncPlanToICU(plan, apiKey, athleteId, setIcuProgress);
-      setIcuResult(result);
-      // 仅全量成功才记渠道元数据；部分成功保留 stale，且不得记完整成功指标
-      if (result.allSucceeded) {
-        markExportSuccess('icu', currentPlanFp);
-        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'success'));
-      } else if (result.success > 0 && result.failed > 0) {
-        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'partial'));
-      } else {
-        mutateMetrics(s => recordChannelOutcome(s, 'icu', 'fail'));
-      }
-      setIcuView('done');
-    } catch (err) {
-      // 循环外异常（如同步函数本身 throw）：诚实全失败，退出 syncing，避免卡死
-      const failedTotal = Math.max(workoutCount, 1);
-      const result = {
-        success: 0,
-        failed: failedTotal,
-        total: failedTotal,
-        anySucceeded: false,
-        allSucceeded: false,
-        firstError: err instanceof Error ? err.message : String(err),
-      };
-      setIcuResult(result);
-      mutateMetrics(s => recordChannelOutcome(s, 'icu', 'fail'));
-      setIcuView('done');
-    }
-  };
+  const hasAnyStale = staleFit || staleIcs;
 
   const handleFitExport = (range: FitExportRange) => {
     setExportError(null);
@@ -250,7 +200,7 @@ export function CalendarView() {
         mutateMetrics(s => recordChannelOutcome(s, 'fit', 'fail'));
         // 保持导出 sheet 可操作，在范围内展示 reason
         setExportError(res.reason?.trim() || '导出失败，请重试');
-        setIcuView('fit-range');
+        setSheetView('fit-range');
       }
     } catch (err) {
       mutateMetrics(s => recordChannelOutcome(s, 'fit', 'fail'));
@@ -259,7 +209,7 @@ export function CalendarView() {
           ? `导出失败：${err.message.trim()}`
           : '导出失败，请重试',
       );
-      setIcuView('fit-range');
+      setSheetView('fit-range');
     }
   };
 
@@ -279,18 +229,12 @@ export function CalendarView() {
 
   const goExportMenu = () => {
     setExportError(null);
-    setIcuView('menu');
+    setSheetView('menu');
   };
 
   const goFitRange = () => {
     setExportError(null);
-    setIcuView('fit-range');
-  };
-
-  const goIcuSetup = () => {
-    setExportError(null);
-    setIcuAckDuplicate(false);
-    setIcuView('setup');
+    setSheetView('fit-range');
   };
 
   const copyWeeklyReport = async () => {
@@ -328,12 +272,9 @@ export function CalendarView() {
   const closeExport = () => {
     setShowExport(false);
     setExportError(null);
-    // Reset ICU state after sheet closes
+    // 延迟重置导出 sheet 视图
     setTimeout(() => {
-      setIcuView('menu');
-      setIcuProgress(null);
-      setIcuResult(null);
-      setIcuAckDuplicate(false);
+      setSheetView('menu');
       setExportError(null);
     }, 300);
   };
@@ -776,7 +717,7 @@ export function CalendarView() {
       {showExport && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-          onClick={icuView === 'menu' || icuView === 'fit-range' ? closeExport : undefined}
+          onClick={sheetView === 'menu' || sheetView === 'fit-range' ? closeExport : undefined}
         >
           <div
             className="bg-[var(--color-surface)] rounded-t-3xl w-full max-w-lg pb-safe animate-in slide-in-from-bottom duration-250"
@@ -788,7 +729,7 @@ export function CalendarView() {
             </div>
 
             {/* ── Menu view ── */}
-            {icuView === 'menu' && (
+            {sheetView === 'menu' && (
               <>
                 <div className="px-5 pb-2">
                   <p className="text-[17px] font-semibold text-white mb-1">导出训练计划</p>
@@ -835,29 +776,6 @@ export function CalendarView() {
                     </div>
                   </button>
 
-                  {/* Intervals.icu sync */}
-                  <button
-                    onClick={goIcuSetup}
-                    className="w-full flex items-center gap-4 bg-[var(--color-surface-2)] rounded-2xl px-4 py-4 active:opacity-70 text-left"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-[var(--color-purple)]/15 flex items-center justify-center flex-shrink-0">
-                      <Activity className="w-5 h-5 text-[var(--color-purple)]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[15px] font-semibold text-white">同步到 Intervals.icu</p>
-                        {icuApiKey && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--color-accent)]/15 text-[var(--color-accent)]">已连接</span>
-                        )}
-                      </div>
-                      <p className="text-[12px] text-[var(--color-label-3)] mt-0.5">
-                        {ICU_IDEMPOTENT_SYNC_PROVEN
-                          ? '自动推送到 Garmin · COROS · Wahoo · Polar'
-                          : '手动同步 · 重复推送可能产生重复事件'}
-                      </p>
-                    </div>
-                  </button>
-
                   <button
                     onClick={closeExport}
                     className="w-full py-3.5 text-[15px] font-semibold text-[var(--color-label-2)] bg-[var(--color-surface-2)] rounded-2xl active:opacity-70"
@@ -869,7 +787,7 @@ export function CalendarView() {
             )}
 
             {/* ── FIT range picker ── */}
-            {icuView === 'fit-range' && (
+            {sheetView === 'fit-range' && (
               <div className="px-5 pb-8" data-testid="export-fit-range">
                 <div className="flex items-center gap-3 mb-4">
                   <button
@@ -930,176 +848,6 @@ export function CalendarView() {
             )}
 
             {/* ── Setup / confirm view ── */}
-            {icuView === 'setup' && (
-              <div className="px-5 pb-8">
-                <div className="flex items-center gap-3 mb-5">
-                  <button onClick={goExportMenu} className="text-[var(--color-accent)] text-[14px]">← 返回</button>
-                  <p className="text-[17px] font-semibold text-white">Intervals.icu 同步</p>
-                </div>
-
-                {icuApiKey ? (
-                  // Already connected — show summary + confirm
-                  <div className="space-y-4">
-                    <div className="bg-[var(--color-surface-2)] rounded-2xl px-4 py-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-[12px] text-[var(--color-label-3)]">已连接账号</p>
-                        <p className="text-[14px] font-mono text-white mt-0.5">#{icuAthleteId}</p>
-                      </div>
-                      <button
-                        onClick={() => { setIcuKeyInput(icuApiKey); setIcuIdInput(icuAthleteId); }}
-                        className="text-[12px] text-[var(--color-accent)]"
-                      >
-                        修改
-                      </button>
-                    </div>
-                    <p className="text-[12px] text-[var(--color-label-3)] leading-relaxed">
-                      将推送 <span className="text-white font-semibold">{workoutCount} 节课</span>到你的 Intervals.icu 日历。确保已在 Intervals.icu 设置页连接了 Garmin / COROS 账号。
-                    </p>
-                    <p className="text-[11px] text-[var(--color-orange)]/90 leading-relaxed">
-                      安全提示：API Key 仅保留在当前页面会话，不会写入本地存储。关闭标签页后需重新粘贴。
-                    </p>
-                    {!ICU_IDEMPOTENT_SYNC_PROVEN && everSyncedIcu && (
-                      <div className="rounded-xl border border-[var(--color-orange)]/30 bg-[var(--color-orange)]/10 px-3 py-2.5">
-                        <p className="text-[11px] text-[var(--color-orange)] leading-relaxed font-medium">
-                          {ICU_RESYNC_WARNING}
-                        </p>
-                        <label className="mt-2 flex items-start gap-2 text-[11px] text-[var(--color-label-2)] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={icuAckDuplicate}
-                            onChange={e => setIcuAckDuplicate(e.target.checked)}
-                            className="mt-0.5"
-                          />
-                          <span>我已了解可能产生重复事件，并已自行清理或接受风险</span>
-                        </label>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => handleICUSync(icuApiKey, icuAthleteId)}
-                      disabled={!ICU_IDEMPOTENT_SYNC_PROVEN && everSyncedIcu && !icuAckDuplicate}
-                      className="w-full bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[15px] disabled:opacity-30"
-                    >
-                      {everSyncedIcu && !ICU_IDEMPOTENT_SYNC_PROVEN
-                        ? `确认后再次同步 ${workoutCount} 节课`
-                        : `开始同步 ${workoutCount} 节课`}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { clearICUCredentials(); setIcuKeyInput(''); }}
-                      className="w-full py-3 text-[13px] font-medium text-[var(--color-label-2)] bg-[var(--color-surface-2)] rounded-2xl"
-                    >
-                      清除本页密钥
-                    </button>
-                  </div>
-                ) : (
-                  // First time — show credential form
-                  <div className="space-y-4">
-                    <p className="text-[13px] text-[var(--color-label-2)] leading-relaxed">
-                      在 <span className="text-white">intervals.icu → 设置 → Developer Settings</span> 生成 API Key，再从地址栏复制你的 Athlete ID（如 <span className="font-mono text-white">i12345</span>）。
-                    </p>
-                    <p className="text-[11px] text-[var(--color-orange)]/90 leading-relaxed">
-                      安全提示：API Key 仅保留在当前页面会话，不会写入本地存储；Athlete ID 可记住以便下次填写。
-                    </p>
-                    <div>
-                      <p className="text-[12px] text-[var(--color-label-3)] mb-1.5">API Key</p>
-                      <input
-                        type="text"
-                        value={icuKeyInput}
-                        onChange={e => setIcuKeyInput(e.target.value)}
-                        placeholder="粘贴你的 API Key"
-                        className="w-full bg-[var(--color-surface-2)] text-white rounded-xl px-4 py-3 text-[14px] font-mono outline-none border border-transparent focus:border-[var(--color-accent)] placeholder:text-[var(--color-label-4)]"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-[12px] text-[var(--color-label-3)] mb-1.5">Athlete ID</p>
-                      <input
-                        type="text"
-                        value={icuIdInput}
-                        onChange={e => setIcuIdInput(e.target.value)}
-                        placeholder="例如 i12345"
-                        className="w-full bg-[var(--color-surface-2)] text-white rounded-xl px-4 py-3 text-[14px] font-mono outline-none border border-transparent focus:border-[var(--color-accent)] placeholder:text-[var(--color-label-4)]"
-                      />
-                    </div>
-                    <button
-                      onClick={() => handleICUSync(icuKeyInput.trim(), icuIdInput.trim())}
-                      disabled={!icuKeyInput.trim() || !icuIdInput.trim()}
-                      className="w-full bg-[var(--color-accent)] text-black font-bold py-3.5 rounded-2xl text-[15px] disabled:opacity-30"
-                    >
-                      连接并同步
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Syncing view ── */}
-            {icuView === 'syncing' && icuProgress && (
-              <div className="px-5 pb-12 flex flex-col items-center text-center">
-                <div className="w-14 h-14 rounded-full bg-[var(--color-accent)]/15 flex items-center justify-center mb-4 mt-2">
-                  <Activity className="w-7 h-7 text-[var(--color-accent)] animate-pulse" />
-                </div>
-                <p className="text-[17px] font-semibold text-white mb-1">同步中…</p>
-                <p className="text-[13px] text-[var(--color-label-3)] mb-5">
-                  {icuProgress.current} / {icuProgress.total} 节课
-                </p>
-                {/* Progress bar */}
-                <div className="w-full bg-[var(--color-surface-2)] rounded-full h-1.5">
-                  <div
-                    className="h-1.5 rounded-full bg-[var(--color-accent)] transition-all duration-200"
-                    style={{ width: `${(icuProgress.current / icuProgress.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── Done view ── */}
-            {icuView === 'done' && icuResult && (
-              <div className="px-5 pb-10 flex flex-col items-center text-center">
-                <div className={cn(
-                  'w-14 h-14 rounded-full flex items-center justify-center mb-4 mt-2',
-                  icuResult.allSucceeded ? 'bg-[var(--color-accent)]/15' : 'bg-[var(--color-orange)]/15'
-                )}>
-                  <CheckCircle2 className={cn('w-7 h-7', icuResult.allSucceeded ? 'text-[var(--color-accent)]' : 'text-[var(--color-orange)]')} />
-                </div>
-                {icuResult.allSucceeded ? (
-                  <>
-                    <p className="text-[17px] font-semibold text-white mb-1">同步完成 🎉</p>
-                    <p className="text-[13px] text-[var(--color-label-3)] leading-relaxed">
-                      {icuResult.success} 节课已推送到 Intervals.icu。<br/>打开 Intervals.icu App 确认课表，手表将在下次同步时收到。
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-[17px] font-semibold text-white mb-1">
-                      {icuResult.success > 0 ? '部分同步失败' : '同步失败'}
-                    </p>
-                    <p
-                      className="text-[13px] text-[var(--color-label-3)] leading-relaxed"
-                      data-testid="icu-partial-result"
-                    >
-                      成功 {icuResult.success} 节，失败 {icuResult.failed} 节
-                      {icuResult.total > 0 ? `（共 ${icuResult.total} 节）` : ''}。
-                      {icuResult.success > 0 && (
-                        <span className="block mt-1 text-[var(--color-orange)]">
-                          未全部成功，不标记为已同步；计划过期提醒仍保留。
-                        </span>
-                      )}
-                      {icuResult.firstError && (
-                        <span className="block mt-1 font-mono text-[11px] text-[var(--color-red)]">
-                          {icuResult.firstError}
-                        </span>
-                      )}
-                    </p>
-                  </>
-                )}
-                <button
-                  onClick={closeExport}
-                  className="mt-5 w-full bg-[var(--color-surface-2)] text-[var(--color-label-2)] font-semibold py-3.5 rounded-2xl text-[15px]"
-                >
-                  关闭
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1463,7 +1211,6 @@ export function CalendarView() {
               <ul className="mt-1.5 space-y-0.5 text-[11px] text-[var(--color-label-2)]">
                 {staleFit && <li>· Garmin FIT 导出版本可能过期</li>}
                 {staleIcs && <li>· 日历 ICS 导出版本可能过期</li>}
-                {staleIcu && <li>· Intervals.icu 同步版本可能过期</li>}
               </ul>
               <button
                 type="button"
@@ -1472,11 +1219,6 @@ export function CalendarView() {
               >
                 重新导出 / 同步
               </button>
-              {staleIcu && !ICU_IDEMPOTENT_SYNC_PROVEN && (
-                <p className="mt-1 text-[10px] text-[var(--color-label-3)] leading-relaxed">
-                  Intervals.icu 再次同步前请先清理旧事件；未验证幂等安全。
-                </p>
-              )}
             </div>
           )}
         </div>

@@ -11,16 +11,16 @@ import {
 import type { DailyWorkout } from './training-engine';
 import { toDateKey } from './weekly-adaptation';
 
-export type ExportChannel = 'fit' | 'ics' | 'icu';
+export type ExportChannel = 'fit' | 'ics';
 export type FitExportRange = 'today' | 'week' | 'all';
 
-/** 单次导出/同步成功元数据（ICS/ICU 为全计划；FIT 按范围存一份） */
+/** 单次导出/同步成功元数据（ICS 为全计划；FIT 按范围存一份） */
 export interface ChannelExportMeta {
   /** 最近一次成功导出/同步的 ISO 时间 */
   exportedAt: string;
   /** 实际导出作用域内计划的指纹（非整份 plan 的误用） */
   planFingerprint: string;
-  /** 导出范围；ICS/ICU 固定 all */
+  /** 导出范围；ICS 固定 all */
   range: FitExportRange;
   /** 作用域起止本地日（today/week 必填；all 可省略） */
   scopeStart?: string;
@@ -35,7 +35,6 @@ export type FitExportSyncState = Partial<
 export interface ExportSyncState {
   fit?: FitExportSyncState;
   ics?: ChannelExportMeta;
-  icu?: ChannelExportMeta;
 }
 
 /** 指纹载荷版本：字段集变更时递增 */
@@ -214,7 +213,6 @@ export function isChannelStale(
 /** 记录 ICS/ICU 全量成功（range 固定 all） */
 export function recordFullChannelSuccess(
   prev: ExportSyncState,
-  channel: 'ics' | 'icu',
   fingerprint: string,
   at: Date = new Date(),
 ): ExportSyncState {
@@ -224,7 +222,7 @@ export function recordFullChannelSuccess(
     planFingerprint: fingerprint,
     range: 'all',
   };
-  return { ...prev, [channel]: meta };
+  return { ...prev, ics: meta };
 }
 
 /**
@@ -287,7 +285,7 @@ export function recordChannelSuccess(
       },
     };
   }
-  return recordFullChannelSuccess(prev, channel, fingerprint, at);
+  return recordFullChannelSuccess(prev, fingerprint, at);
 }
 
 /**
@@ -327,9 +325,9 @@ export function migrateExportSyncState(raw: unknown): ExportSyncState {
     }
   }
 
-  for (const ch of ['ics', 'icu'] as const) {
-    const m = normalizeScopedMeta(source[ch], 'all');
-    if (m) out[ch] = m;
+  {
+    const m = normalizeScopedMeta(source.ics, 'all');
+    if (m) out.ics = m;
   }
   return out;
 }

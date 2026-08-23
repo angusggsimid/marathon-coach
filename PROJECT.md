@@ -33,7 +33,6 @@ src/
     ├── coros-mcp.ts         # COROS OAuth PKCE + MCP 客户端（开发机免授权端点）
     ├── backup.ts            # JSON 备份/恢复
     ├── export-fit/ics.ts    # FIT/ICS 导出
-    ├── intervals-icu.ts     # Intervals.icu 同步（可选，浏览器直连可能受 CORS 限制）
     └── insights/            # 洞察库：快照解析、科学指标、教练处方、就绪门、周期层
 crawler/                     # 赛事爬虫（zuicool/nowrun/chinarun/marathonbm），GitHub Actions 每日刷新
 scripts/selftest-core.mts    # 引擎/算法/接口自测（372 用例）

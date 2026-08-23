@@ -1,5 +1,5 @@
 /**
- * 核心逻辑自测：训练计划守卫、周自适应、周快照、计划指纹、FIT 范围、ICU 幂等门槛。
+ * 核心逻辑自测：训练计划守卫、周自适应、周快照、计划指纹、FIT 范围、备份、本地指标。
  * 运行：npx tsx scripts/selftest-core.mts
  */
 import { addDays, format, startOfWeek } from 'date-fns';
@@ -52,17 +52,6 @@ import {
   isExportTestOverrideAllowed,
   isLoopbackHostname,
 } from '../src/utils/export-test-gate.ts';
-import {
-  buildICUEventBody,
-  buildICUExternalId,
-  ICU_IDEMPOTENT_SYNC_PROVEN,
-  isICUCompleteSuccess,
-  syncPlanToICU,
-} from '../src/utils/intervals-icu.ts';
-import {
-  createNonIdempotentMockFetch,
-  createPartialSuccessMockFetch,
-} from './icu-test-fixtures.mts';
 import {
   BACKUP_APP_ID,
   BACKUP_MAX_BYTES,
@@ -543,22 +532,16 @@ console.log('\n── plan-fingerprint ──');
 }
 
 {
-  // ICS/ICU 全计划：从未导出不 stale；成功后指纹变化才 stale；渠道独立
+  // ICS 全计划：从未导出不 stale；成功后指纹变化才 stale
   assert(!isChannelStale(undefined, 'fp_a'), 'never exported not stale');
   assert(!isChannelStale(null, 'fp_a'), 'null meta not stale');
-  let state = recordFullChannelSuccess({}, 'ics', 'fp_old');
+  let state = recordFullChannelSuccess({}, 'fp_old');
   assert(isChannelStale(state.ics, 'fp_new'), 'ics stale after plan change');
-  assert(!isChannelStale(state.icu, 'fp_new'), 'icu never exported not stale');
-  state = recordFullChannelSuccess(state, 'ics', 'fp_new');
+  state = recordFullChannelSuccess(state, 'fp_new');
   assert(!isChannelStale(state.ics, 'fp_new'), 'ics cleared after re-export');
-  state = recordFullChannelSuccess(state, 'icu', 'fp_new');
-  assert(
-    isChannelStale(state.ics, 'fp_newer') && isChannelStale(state.icu, 'fp_newer'),
-    'both stale on new plan',
-  );
-  state = recordFullChannelSuccess(state, 'icu', 'fp_newer');
-  assert(isChannelStale(state.ics, 'fp_newer'), 'ics still stale when only icu refreshed');
-  assert(!isChannelStale(state.icu, 'fp_newer'), 'icu cleared alone');
+  assert(isChannelStale(state.ics, 'fp_newer'), 'ics stale when plan changes again');
+  state = recordFullChannelSuccess(state, 'fp_newer');
+  assert(!isChannelStale(state.ics, 'fp_newer'), 'ics cleared alone');
 }
 
 {
@@ -731,14 +714,14 @@ console.log('\n── plan-fingerprint ──');
   });
   assert(v4.fit?.week?.scopeStart === '2026-07-06', 'v4 week scope kept');
 
-  // nested exportSync + icu
+  // nested exportSync + ics
   const nested = migrateExportSyncState({
     exportSync: {
-      icu: { exportedAt: '2026-07-02T12:00:00.000Z', planFingerprint: 'fp_icu' },
+      ics: { exportedAt: '2026-07-02T12:00:00.000Z', planFingerprint: 'fp_ics' },
     },
   });
-  assert(nested.icu?.planFingerprint === 'fp_icu', 'migrate nested exportSync');
-  assert(nested.icu?.range === 'all', 'icu default range all');
+  assert(nested.ics?.planFingerprint === 'fp_ics', 'migrate nested exportSync');
+  assert(nested.ics?.range === 'all', 'ics default range all');
 }
 
 console.log('\n── FIT range ──');
@@ -856,58 +839,6 @@ console.log('\n── export test gate (production hook safety) ──');
   assert(!week.some(w => toDateKey(w.date) === '2026-07-12'), 'prev Sun excluded');
 }
 
-console.log('\n── Intervals.icu idempotency gate ──');
-
-{
-  assert(ICU_IDEMPOTENT_SYNC_PROVEN === false, 'idempotent NOT proven — gate holds');
-  const w: DailyWorkout = {
-    date: parseLocalDate('2026-07-15'),
-    workoutType: 'Tempo',
-    description: 'Tempo - 8k',
-    distanceKm: 8,
-    targetPace: "4'50\"",
-  };
-  const id1 = buildICUExternalId(w);
-  const id2 = buildICUExternalId({ ...w, description: 'changed text only' });
-  assert(id1 === id2, 'external_id stable on description-only change');
-  assert(id1 === 'marathon-2026-07-15-Tempo', 'external_id format', id1);
-  const body = buildICUEventBody(w);
-  assert(body.external_id === id1, 'body carries external_id');
-  assert(body.category === 'WORKOUT', 'category WORKOUT');
-
-  // 合同：非幂等 mock 上重复 sync → 双倍 POST（证明当前路径不安全）
-  const mock = createNonIdempotentMockFetch();
-  const plan: DailyWorkout[] = [w, { ...w, date: parseLocalDate('2026-07-16'), workoutType: 'Easy', description: 'Easy' }];
-  const r1 = await syncPlanToICU(plan, 'key', 'i1', undefined, mock.fetchImpl);
-  const r2 = await syncPlanToICU(plan, 'key', 'i1', undefined, mock.fetchImpl);
-  assert(r1.anySucceeded && r2.anySucceeded, 'mock syncs succeed');
-  assert(r1.allSucceeded && r2.allSucceeded, 'full mock sync allSucceeded');
-  assert(r1.total === 2 && r1.success === 2 && r1.failed === 0, 'complete success contract fields');
-  assert(mock.getPostCount() === 4, 'non-idempotent mock doubles posts', `posts=${mock.getPostCount()}`);
-  assert(mock.createdExternalIds.length === 4, 'four events created under non-idempotent server');
-  // 因此不得宣称一键安全重同步
-  assert(!ICU_IDEMPOTENT_SYNC_PROVEN, 'must not claim safe resync');
-
-  // 部分成功：anySucceeded 但 !allSucceeded → 不得视为完整同步
-  const partialMock = createPartialSuccessMockFetch(1);
-  const rPartial = await syncPlanToICU(plan, 'key', 'i1', undefined, partialMock.fetchImpl);
-  assert(rPartial.success === 1 && rPartial.failed === 1 && rPartial.total === 2, 'partial counts');
-  assert(rPartial.anySucceeded === true, 'partial anySucceeded');
-  assert(rPartial.allSucceeded === false, 'partial not allSucceeded');
-  assert(
-    !isICUCompleteSuccess(rPartial),
-    'isICUCompleteSuccess false on partial',
-  );
-  assert(
-    isICUCompleteSuccess({ success: 2, failed: 0, total: 2 }),
-    'isICUCompleteSuccess true when full',
-  );
-  assert(
-    !isICUCompleteSuccess({ success: 0, failed: 0, total: 0 }),
-    'empty plan not complete success',
-  );
-}
-
 console.log('\n── backup import/export ──');
 
 {
@@ -959,7 +890,7 @@ console.log('\n── backup import/export ──');
     assert(parsed.payload.data.vacations[0]?.id === 'vac-1', 'vacations restored');
     assert(parsed.payload.data.isPlanGenerated === true, 'isPlanGenerated');
     const restorable = toRestorableState(parsed.payload.data);
-    assert(restorable.icuApiKey === '', 'restorable forces empty api key');
+    assert(!('icuApiKey' in restorable), 'restorable no api key field');
     assert(restorable.plan.every(w => w.date instanceof Date), 'all plan dates Date');
     // 训练引擎可再读 profile
     assert(generateTrainingPlan(restorable.profile, asOf).length > 0, 'restored profile usable by engine');
@@ -1076,8 +1007,8 @@ console.log('\n── backup import/export ──');
     unknownRoot.extraEvil = 1;
     assert(parseBackupJson(JSON.stringify(unknownRoot)).ok === false, 'reject unknown root key');
     const unknownData = structuredClone(baseData);
-    unknownData.icuAthleteId = 'should-not';
-    assert(parseBackupJson(wrapData(unknownData)).ok === false, 'reject unknown data key athlete');
+    unknownData.mysteryField = 'should-not';
+    assert(parseBackupJson(wrapData(unknownData)).ok === false, 'reject unknown data key');
     const unknownProfile = structuredClone(baseData);
     unknownProfile.profile.secretNote = 'x';
     assert(parseBackupJson(wrapData(unknownProfile)).ok === false, 'reject unknown profile key');
@@ -1159,11 +1090,6 @@ console.log('\n── local metrics privacy ──');
   assert(m.totals.returnDays === 1, 'return day counted');
   assert(m.totals.standaloneSessions === 1, 'standalone session');
 
-  m = recordChannelOutcome(m, 'icu', 'partial', new Date(2026, 6, 16));
-  assert(m.totals.icuPartial === 1, 'icu partial not counted as success');
-  assert(m.totals.icuOk === 0, 'icu ok still 0 on partial');
-  m = recordChannelOutcome(m, 'icu', 'success', new Date(2026, 6, 16));
-  assert(m.totals.icuOk === 1, 'icu full success');
   m = recordChannelOutcome(m, 'backup_import', 'cancel', new Date(2026, 6, 16));
   assert(m.totals.backupImportCancel === 1, 'import cancel counted');
 
@@ -1272,20 +1198,6 @@ console.log('\n── local metrics privacy ──');
   assert(migrated.version === METRICS_VERSION || migrated.firstOpenDay != null, 'v1 migrates days');
   assert(migrated.firstOpenDay === localDayKey(new Date('2026-07-10T08:15:30.000Z')), 'v1 firstOpenDay from ISO');
   assert(!('secret' in (migrated.byDay['2026-07-10'] || {})), 'v1 day secret dropped');
-
-  // syncPlanToICU 外层 throw 模拟：调用方应得到可序列化失败（组件层 catch；此处验证 mock throw）
-  {
-    const boom = async () => { throw new Error('network down'); };
-    let caught = false;
-    let failResult: { success: number; failed: number; allSucceeded: boolean } | null = null;
-    try {
-      await boom();
-    } catch {
-      caught = true;
-      failResult = { success: 0, failed: 5, allSucceeded: false };
-    }
-    assert(caught && failResult && !failResult.allSucceeded && failResult.success === 0, 'icu outer throw → honest fail result');
-  }
 }
 
 console.log('\n── weekly-adaptation 2.3 双源合并 ──');

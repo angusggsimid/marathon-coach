@@ -19,7 +19,6 @@ export const METRICS_MAX_COUNT = 1_000_000_000;
 export type MetricChannel =
   | 'fit'
   | 'ics'
-  | 'icu'
   | 'backup_export'
   | 'backup_import'
   | 'diag_export';
@@ -452,10 +451,6 @@ export function recordChannelOutcome(
   } else if (channel === 'ics') {
     if (outcome === 'success') bump('icsOk', 'icsOk');
     else bump('icsFail', 'icsFail');
-  } else if (channel === 'icu') {
-    if (outcome === 'success') bump('icuOk', 'icuOk');
-    else if (outcome === 'partial') bump('icuPartial', 'icuPartial');
-    else bump('icuFail', 'icuFail');
   } else if (channel === 'backup_export') {
     if (outcome === 'success') bump('backupExportOk', 'backupExportOk');
     else bump('backupExportFail', 'backupExportFail');

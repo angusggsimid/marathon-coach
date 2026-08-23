@@ -124,8 +124,6 @@ interface AppState {
   isPlanGenerated: boolean;
   planNeedsRegen: boolean;   // true when races changed after last plan generation
   completions: Record<string, CompletionEntry>; // key = 'YYYY-MM-DD'
-  icuApiKey: string;
-  icuAthleteId: string;
   myRaces: MyRace[];
   vacations: Vacation[];
   /** 分渠道最后成功导出/同步元数据（本地）；从未成功则为空 */
@@ -152,8 +150,6 @@ interface AppState {
   setActiveTab: (tab: TabType) => void;
   logCompletion: (dateStr: string, status: CompletionStatus, rpe: RPELevel) => void;
   getWeeklyAdaptation: (weekEndSunday: Date) => WeeklyAdaptation;
-  saveICUCredentials: (apiKey: string, athleteId: string) => void;
-  clearICUCredentials: () => void;
   addMyRace: (raceId: string, distance: MyRaceDistance, goal: MyRaceGoal, meta?: Omit<MyRace, 'raceId'|'distance'|'goal'|'addedAt'>) => void;
   removeMyRace: (raceId: string) => void;
   updateMyRaceGoal: (raceId: string, goal: MyRaceGoal) => void;
@@ -171,7 +167,7 @@ interface AppState {
   ) => void;
   /**
    * 从已校验备份恢复产品状态。
-   * 覆盖白名单字段；强制 icuApiKey=''；不改写 icuAthleteId（最小敏感：备份本身不含）。
+   * 覆盖白名单字段。
    */
   restoreFromBackup: (data: BackupData) => void;
 
@@ -237,7 +233,7 @@ const defaultProfile: UserProfile = {
   longRunDay: 0,
 };
 
-/** 从 persist 根或嵌套 state 取出可写 state 对象，并剔除 icuApiKey */
+/** 从 persist 根或嵌套 state 取出可写 state 对象，迁移 exportSync（并清除遗留的 icuApiKey/icuAthleteId） */
 function stripApiKeyAndNormalizeExport(
   persisted: unknown,
 ): unknown {
@@ -250,8 +246,11 @@ function stripApiKeyAndNormalizeExport(
       ? (root.state as Record<string, unknown>)
       : root;
 
+  // 清理已删除的 ICU 通道遗留字段（旧版本持久化数据）
   if ('icuApiKey' in stateBag) delete stateBag.icuApiKey;
+  if ('icuAthleteId' in stateBag) delete stateBag.icuAthleteId;
   if (stateBag !== root && 'icuApiKey' in root) delete root.icuApiKey;
+  if (stateBag !== root && 'icuAthleteId' in root) delete root.icuAthleteId;
 
   stateBag.exportSync = migrateExportSyncState(stateBag.exportSync);
   return persisted;
@@ -266,8 +265,6 @@ export const useStore = create<AppState>()(
       isPlanGenerated: false,
       planNeedsRegen: false,
       completions: {},
-      icuApiKey: '',
-      icuAthleteId: '',
       myRaces: [],
       vacations: [],
       exportSync: {},
@@ -303,7 +300,6 @@ export const useStore = create<AppState>()(
           return {
             exportSync: recordFullChannelSuccess(
               prev,
-              channel,
               planOrFingerprint,
             ),
           };
@@ -327,8 +323,6 @@ export const useStore = create<AppState>()(
           exportSync: slice.exportSync,
           // 不恢复备份中的 activeTab：固定档案页，避免成功反馈因跳转消失
           activeTab: 'profile',
-          icuApiKey: '',
-          // 保留本地 Athlete ID（备份不含凭证类标识）
         }));
       },
 
@@ -409,8 +403,6 @@ export const useStore = create<AppState>()(
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
-      saveICUCredentials: (apiKey, athleteId) => set({ icuApiKey: apiKey, icuAthleteId: athleteId }),
-      clearICUCredentials: () => set({ icuApiKey: '', icuAthleteId: get().icuAthleteId }),
 
       addMyRace: (raceId, distance, goal, meta = {}) => {
         const entry: MyRace = { raceId, distance, goal, addedAt: new Date().toISOString(), ...meta };
@@ -486,17 +478,16 @@ export const useStore = create<AppState>()(
       // 安全：API Key 不得写入 localStorage；仅会话内存保留
       partialize: (state) => {
         const {
-          icuApiKey: _omitKey,
           corosAuth: _omitAuth,
           corosSnapshot: _omitSnapshot,
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
-          completions, icuAthleteId, myRaces, vacations, exportSync,
+          completions, myRaces, vacations, exportSync,
           corosLastSyncAt, corosSyncIntervalDays, adaptationOverride, sessionOverride,
         } = state;
-        void _omitKey; void _omitAuth; void _omitSnapshot;
+        void _omitAuth; void _omitSnapshot;
         return {
           profile, plan, activeTab, isPlanGenerated, planNeedsRegen,
-          completions, icuAthleteId, myRaces, vacations, exportSync,
+          completions, myRaces, vacations, exportSync,
           corosLastSyncAt, corosSyncIntervalDays, adaptationOverride, sessionOverride,
         };
       },
@@ -509,7 +500,6 @@ export const useStore = create<AppState>()(
         const merged = {
           ...current,
           ...p,
-          icuApiKey: '',
           exportSync: migrateExportSyncState(p.exportSync),
         };
         // 水合时点重算客观裁决（渲染期不纯计算）
