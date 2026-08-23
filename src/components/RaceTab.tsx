@@ -6,8 +6,11 @@ import {
 import { cn } from '../utils/cn';
 import { useStore } from '../store/useStore';
 import { getSuppressedRaces } from '../utils/race-plan-overlay';
+import { formatPredictionDelta, raceTimeToSec } from '../utils/prediction-calibration';
+import { resolveVDOT, predictTime, timeToSeconds } from '../utils/training-engine';
 import type { MyRace, MyRaceGoal, MyRaceDistance } from '../store/useStore';
 import { RACES as SEED_RACES } from '../data/races';
+import { format } from 'date-fns';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,7 +184,10 @@ function raceProximityWarning(
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function RaceTab() {
-  const { myRaces, addMyRace, removeMyRace, isPlanGenerated, setActiveTab } = useStore();
+  const { myRaces, addMyRace, removeMyRace, isPlanGenerated, setActiveTab,
+    corosSnapshot, setRaceResult } = useStore();
+  const [editingResultId, setEditingResultId] = useState<string | null>(null);
+  const [resultInput, setResultInput] = useState('');
 
   // ── Data loading ──
   const [races, setRaces]       = useState<UnifiedRace[]>([]);
@@ -393,6 +399,24 @@ export function RaceTab() {
     setCustomGoal('pb');
     setCustomError('');
     setCustomOpen(true);
+  };
+
+  // ── 完赛成绩录入（R3 预测校准数据源）──
+  const saveRaceResult = (mr: MyRace, status: 'finished' | 'dnf' | 'dns') => {
+    const time = resultInput.trim();
+    if (status === 'finished' && !/^\d{1,2}:[0-5]\d:[0-5]\d$/.test(time)) return;
+    const predKey = mr.distance === '10k' ? 'km10' : mr.distance;
+    const snapPred = corosSnapshot?.fitness?.predictions?.[predKey as 'full' | 'half' | 'km10'];
+    const predicted = snapPred ?? (mr.distance !== '10k'
+      ? predictTime(resolveVDOT(storeProfile), mr.distance)
+      : undefined);
+    setRaceResult(mr.raceId, {
+      status,
+      ...(status === 'finished' ? { time } : {}),
+      ...(predicted ? { predicted } : {}),
+    });
+    setEditingResultId(null);
+    setResultInput('');
   };
 
   const handleCustomSave = () => {
@@ -639,6 +663,61 @@ export function RaceTab() {
                           <p className="text-[10px] text-[var(--color-orange)] mt-1 leading-relaxed">
                             距主赛 {sup.daysFromPrimary} 天 · 已按普通训练处理（避免双重减量）
                           </p>
+                        );
+                      })()}
+                      {(() => {
+                        const isPast = mr.date && mr.date < format(new Date(), 'yyyy-MM-dd');
+                        if (!isPast) return null;
+                        if (mr.resultStatus === 'finished' && mr.resultTime) {
+                          const pred = mr.resultPredictedAtRace;
+                          const ratio = pred ? raceTimeToSec(mr.resultTime)! / timeToSeconds(pred) : null;
+                          return (
+                            <p className="text-[10px] text-[var(--color-accent)] mt-1 leading-relaxed">
+                              ✓ 成绩 {mr.resultTime}
+                              {ratio !== null && Number.isFinite(ratio)
+                                ? ` · 较当时预测 ${formatPredictionDelta(ratio)}`
+                                : ''}
+                              （用于个性化预测校准）
+                            </p>
+                          );
+                        }
+                        if (mr.resultStatus === 'dnf' || mr.resultStatus === 'dns') {
+                          return (
+                            <p className="text-[10px] text-[var(--color-label-3)] mt-1 leading-relaxed">
+                              {mr.resultStatus === 'dnf' ? 'DNF 未完赛' : 'DNS 未起跑'}（不计入预测校准）
+                            </p>
+                          );
+                        }
+                        if (editingResultId === mr.raceId) {
+                          return (
+                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
+                              <input
+                                value={resultInput}
+                                onChange={e => setResultInput(e.target.value)}
+                                placeholder="实际成绩 3:42:10"
+                                className="w-32 bg-[var(--color-surface-2)] text-white text-[11px] rounded-lg px-2 py-1 border border-[var(--color-separator)] outline-none font-mono"
+                              />
+                              <button
+                                onClick={() => saveRaceResult(mr, 'finished')}
+                                disabled={!/^\d{1,2}:[0-5]\d:[0-5]\d$/.test(resultInput.trim())}
+                                className="text-[10px] font-semibold px-2 py-1 rounded-lg bg-[var(--color-accent)] text-black disabled:opacity-40"
+                              >完成</button>
+                              <button onClick={() => saveRaceResult(mr, 'dnf')}
+                                className="text-[10px] px-2 py-1 rounded-lg border border-[var(--color-separator)] text-[var(--color-label-2)]">DNF</button>
+                              <button onClick={() => saveRaceResult(mr, 'dns')}
+                                className="text-[10px] px-2 py-1 rounded-lg border border-[var(--color-separator)] text-[var(--color-label-2)]">DNS</button>
+                              <button onClick={() => { setEditingResultId(null); setResultInput(''); }}
+                                className="text-[10px] text-[var(--color-label-4)]">取消</button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => { setEditingResultId(mr.raceId); setResultInput(''); }}
+                            className="text-[10px] text-[var(--color-accent)] underline underline-offset-2 mt-1"
+                          >
+                            记录完赛成绩
+                          </button>
                         );
                       })()}
                     </div>

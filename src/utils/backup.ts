@@ -139,7 +139,10 @@ const COMPLETION_ENTRY_KEYS = new Set(['status', 'rpe']);
 const MY_RACE_KEYS = new Set([
   'raceId', 'distance', 'goal', 'addedAt', 'name', 'date', 'city',
   'province', 'registrationUrl', 'status', 'dateTBD',
+  'resultStatus', 'resultTime', 'resultPredictedAtRace',
 ]);
+const RACE_RESULT_STATUS = new Set(['finished', 'dnf', 'dns']);
+const RACE_TIME_RE = /^\d{1,2}:[0-5]\d:[0-5]\d$/;
 const VACATION_KEYS = new Set(['id', 'start', 'end', 'label']);
 
 const SECRET_KEY_RE = /^(icuapikey|api_key|apikey|authorization|password|secret)$/;
@@ -411,6 +414,16 @@ function parseMyRaces(raw: unknown): MyRace[] | null {
     if (item.dateTBD !== undefined) {
       if (typeof item.dateTBD !== 'boolean') return null;
       race.dateTBD = item.dateTBD;
+    }
+    if (item.resultStatus !== undefined) {
+      if (typeof item.resultStatus !== 'string' || !RACE_RESULT_STATUS.has(item.resultStatus)) return null;
+      race.resultStatus = item.resultStatus as MyRace['resultStatus'];
+    }
+    for (const t of ['resultTime', 'resultPredictedAtRace'] as const) {
+      if (item[t] !== undefined) {
+        if (typeof item[t] !== 'string' || !RACE_TIME_RE.test(item[t])) return null;
+        race[t] = item[t];
+      }
     }
     out.push(race);
   }

@@ -104,6 +104,7 @@ import { getSuppressedRaces } from '../src/utils/race-plan-overlay.ts';
 import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
 import { heatAdjustment } from '../src/utils/heat-adjust.ts';
 import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
+import { calibratePrediction, formatPredictionDelta } from '../src/utils/prediction-calibration.ts';
 
 let passed = 0;
 let failed = 0;
@@ -2082,6 +2083,88 @@ console.log('\n── 天气数据：解析与缓存节流 ──');
   assert(shouldRefetchWeather(fresh, now) === false, '缓存: 2h 内不刷新');
   const stale = { fetchedAt: new Date(now.getTime() - 25 * 3600000).toISOString() };
   assert(shouldRefetchWeather(stale, now) === true, '缓存: 超 24h 刷新');
+}
+
+console.log('\n── 预测偏差自学习 ──');
+{
+  const entry = (distance: 'full' | 'half', resultTime: string, predictedTime?: string) => ({
+    distance, resultTime, ...(predictedTime ? { predictedTime } : {}),
+  });
+
+  // 单场：预测 3:30:00 实际 3:42:00 → ratio ≈1.0571，校准值 = round(12600×ratio)
+  const r1 = calibratePrediction(12600, 'full', [entry('full', '3:42:00', '3:30:00')]);
+  assert(r1 !== null && r1.samples === 1 && Math.abs(r1.adjustedSec - 13320) <= 1,
+    '校准: 单场偏差应用', JSON.stringify(r1));
+  assert(Math.abs(r1!.ratio - 13320 / 12600) < 1e-9, '校准: ratio 精确');
+
+  // 多场取中位数（抗异常值）：ratios [1.05, 1.10, 1.60] → 1.10
+  const hist3 = [
+    entry('full', '3:33:36', '3:30:00'),   // 1.04
+    entry('full', '3:51:00', '3:30:00'),   // 1.10
+    entry('full', '5:36:00', '3:30:00'),   // 1.60 异常场
+  ];
+  const r2 = calibratePrediction(12600, 'full', hist3);
+  assert(r2 !== null && Math.abs(r2.ratio - 1.10) < 0.01, '校准: 中位数抗异常值');
+
+  // 只取最近 3 场（数组顺序末尾优先）
+  const hist4 = [
+    entry('full', '4:12:00', '3:30:00'),   // 1.20 最老
+    ...hist3,
+  ];
+  const r3 = calibratePrediction(12600, 'full', hist4);
+  assert(r3 !== null && Math.abs(r3.ratio - 1.10) < 0.01, '校准: 只取最近 3 场');
+
+  // 距离分开：全马历史不影响半马校准
+  const r4 = calibratePrediction(6223, 'half', [
+    entry('full', '3:42:00', '3:30:00'),
+    entry('half', '1:46:24', '1:43:43'),   // ratio = 6384/6223 ≈ 1.0259
+  ]);
+  assert(r4 !== null && Math.abs(r4.ratio - 6384 / 6223) < 0.001, '校准: 距离分开');
+
+  // 无预测的记录不计入
+  const r5 = calibratePrediction(12600, 'full', [
+    entry('full', '3:42:00'),
+    entry('full', '3:42:00', '3:30:00'),
+  ]);
+  assert(r5 !== null && r5.samples === 1, '校准: 无预测记录排除');
+
+  // 空历史 → null
+  assert(calibratePrediction(12600, 'full', []) === null, '校准: 空历史 null');
+  assert(calibratePrediction(12600, 'full', [entry('full', '3:42:00')]) === null, '校准: 无有效样本 null');
+
+  // 偏差格式化
+  assert(formatPredictionDelta(1.05).startsWith('+5'), '校准: 偏差 +5% 格式');
+  assert(formatPredictionDelta(0.95).startsWith('-5'), '校准: 偏差 -5% 格式');
+
+  // 备份兼容：含成绩字段的 myRace round-trip（复用真实 plan 夹具——空 plan 被拒）
+  {
+    const profile = baseProfile({ raceDate: '2026-11-01', pbHalf: '1:40:00' });
+    const plan = generateTrainingPlan(profile, parseLocalDate('2026-07-01'));
+    const raceWithResult = {
+      raceId: 'r9', distance: 'full' as const, goal: 'pb' as const,
+      addedAt: '2026-03-01T00:00:00.000Z', name: '测试马', date: '2026-03-15',
+      resultStatus: 'finished' as const, resultTime: '3:42:00', resultPredictedAtRace: '3:30:00',
+    };
+    const srcState = {
+      profile, plan,
+      completions: {}, myRaces: [raceWithResult], vacations: [],
+      isPlanGenerated: true, planNeedsRegen: false, exportSync: {},
+    };
+    const payload = buildBackupPayload(srcState as never, parseLocalDate('2026-07-15'));
+    const parsed = parseBackupJson(JSON.stringify(payload));
+    assert(parsed.ok === true, '备份: 含成绩字段解析成功');
+    if (parsed.ok) {
+      const mr = parsed.payload.data.myRaces.find(x => x.raceId === 'r9') as unknown as Record<string, unknown>;
+      assert(!!mr && mr.resultTime === '3:42:00' && mr.resultStatus === 'finished' && mr.resultPredictedAtRace === '3:30:00',
+        '备份: 成绩字段完整保留', JSON.stringify(mr));
+    }
+    const withBad = JSON.parse(JSON.stringify(payload));
+    withBad.data.myRaces[0].resultStatus = 'won';
+    assert(parseBackupJson(JSON.stringify(withBad)).ok === false, '备份: 非法 resultStatus 拒绝');
+    const withBad2 = JSON.parse(JSON.stringify(payload));
+    withBad2.data.myRaces[0].resultTime = '3h42m';
+    assert(parseBackupJson(JSON.stringify(withBad2)).ok === false, '备份: 非法 resultTime 拒绝');
+  }
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

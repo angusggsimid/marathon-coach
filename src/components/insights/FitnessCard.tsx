@@ -1,5 +1,28 @@
 import { useMemo } from 'react';
 import type { CorosSnapshot } from '../../utils/insights/types';
+import { useStore } from '../../store/useStore';
+import { calibratePrediction, formatPredictionDelta, raceTimeToSec } from '../../utils/prediction-calibration';
+import type { MyRace } from '../../store/useStore';
+
+/** hh:mm:ss 秒数 → 展示串 */
+function fmtDuration(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = Math.round(sec % 60);
+  return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+/** 从我的赛事提取完赛记录（仅全马/半马，finished 且有当时预测） */
+function resultHistory(myRaces: MyRace[]) {
+  return myRaces
+    .filter(r => (r.distance === 'full' || r.distance === 'half')
+      && r.resultStatus === 'finished' && r.resultTime && r.resultPredictedAtRace)
+    .map(r => ({
+      distance: r.distance as 'full' | 'half',
+      resultTime: r.resultTime!,
+      predictedTime: r.resultPredictedAtRace!,
+    }));
+}
 import { SectionCard } from './SectionCard';
 import { useECharts } from './useECharts';
 import { AXIS_STYLE, CHART, TOOLTIP_STYLE } from '../../utils/insights/theme';
@@ -17,6 +40,7 @@ function vo2maxTier(v: number): { label: string; color: string } {
 
 export function FitnessCard({ snapshot }: { snapshot: CorosSnapshot }) {
   const f = snapshot.fitness;
+  const myRaces = useStore(s => s.myRaces);
   const vo2 = f?.vo2max;
   const tier = vo2 !== undefined ? vo2maxTier(vo2) : null;
   const weeks = useMemo(() => weeklyVolume(snapshot.activities).slice(-10), [snapshot]);
@@ -79,12 +103,32 @@ export function FitnessCard({ snapshot }: { snapshot: CorosSnapshot }) {
           {predRows.some((r) => r.v) ? (
             <div className="space-y-2">
               <p className="text-[11px] uppercase tracking-wider text-[var(--color-label-3)] font-semibold">手表比赛预测</p>
-              {predRows.map((r) => r.v && (
-                <div key={r.label} className="flex items-center justify-between">
-                  <span className="text-[13px] text-[var(--color-label-2)]">{r.label}</span>
-                  <span className="font-mono text-[14px] font-semibold">{r.v}</span>
-                </div>
-              ))}
+              {predRows.map((r) => {
+                if (!r.v) return null;
+                const distKey: Partial<Record<string, 'full' | 'half'>> = { '半马': 'half', '全马': 'full' };
+                const dist = distKey[r.label];
+                let calLine: string | null = null;
+                if (dist) {
+                  const rawSec = raceTimeToSec(r.v.includes(':') && r.v.split(':').length === 2 ? `0:${r.v}` : r.v);
+                  const cal = rawSec !== null
+                    ? calibratePrediction(rawSec, dist, resultHistory(myRaces))
+                    : null;
+                  if (cal) {
+                    calLine = `个性化预期 ${fmtDuration(cal.adjustedSec)}（近 ${cal.samples} 场偏差 ${formatPredictionDelta(cal.ratio)}）`;
+                  }
+                }
+                return (
+                  <div key={r.label}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] text-[var(--color-label-2)]">{r.label}</span>
+                      <span className="font-mono text-[14px] font-semibold">{r.v}</span>
+                    </div>
+                    {calLine && (
+                      <p className="text-[10.5px] text-[var(--color-accent)] mt-0.5 leading-relaxed">{calLine}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="text-[12px] text-[var(--color-label-3)]">快照中没有比赛预测数据</p>

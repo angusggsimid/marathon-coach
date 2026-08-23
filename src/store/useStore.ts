@@ -103,6 +103,10 @@ export interface MyRace {
   registrationUrl?: string;
   status?:          string;
   dateTBD?:         boolean;
+  // 完赛记录（R3 预测校准数据源；仅全马/半马参与校准）
+  resultStatus?:      'finished' | 'dnf' | 'dns';
+  resultTime?:        string;   // 'hh:mm:ss'
+  resultPredictedAtRace?: string; // 录入时抓取的手表预测（近似赛时预测）
 }
 
 export interface WeeklyAdaptation {
@@ -159,6 +163,8 @@ interface AppState {
   addMyRace: (raceId: string, distance: MyRaceDistance, goal: MyRaceGoal, meta?: Omit<MyRace, 'raceId'|'distance'|'goal'|'addedAt'>) => void;
   removeMyRace: (raceId: string) => void;
   updateMyRaceGoal: (raceId: string, goal: MyRaceGoal) => void;
+  /** 记录完赛成绩（finished 需 time；预测为录入时抓取快照） */
+  setRaceResult: (raceId: string, result: { status: 'finished' | 'dnf' | 'dns'; time?: string; predicted?: string }) => void;
   addVacation: (start: string, end: string, label?: string) => void;
   removeVacation: (id: string) => void;
   /**
@@ -475,6 +481,15 @@ export const useStore = create<AppState>()(
           planNeedsRegen: state.isPlanGenerated && !!primaryChanged ? true : state.planNeedsRegen,
         };
       }),
+
+      setRaceResult: (raceId, result) => set(state => ({
+        myRaces: state.myRaces.map(r => r.raceId !== raceId ? r : {
+          ...r,
+          resultStatus: result.status,
+          ...(result.status === 'finished' && result.time ? { resultTime: result.time } : { resultTime: undefined }),
+          ...(result.predicted ? { resultPredictedAtRace: result.predicted } : {}),
+        }),
+      })),
 
       logCompletion: (dateStr, status, rpe) => {
         set(state => ({
