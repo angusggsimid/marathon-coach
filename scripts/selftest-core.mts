@@ -1444,5 +1444,197 @@ console.log('\n── Garmin FIT 适配器 ──');
   assert(bad.snapshot.source === 'garmin-fit' && bad.snapshot.dailyMetrics.length === 0, 'garmin 源 + 无日指标（诚实降级）');
 }
 
+console.log('\n── insights 库回归（validate/zones/metrics/规则/coach，自 insights/selftest 移植）──');
+{
+  const { parseSnapshot } = await import('../src/utils/insights/validate.ts');
+  const { paceToZone } = await import('../src/utils/insights/zones.ts');
+  const {
+    weeklyVolume, zoneDistribution, splitHalves, trendSlope, baseline,
+    efficiencyFactorSeries, decouplingSeries, seilerDistribution, sleepDebt,
+  } = await import('../src/utils/insights/metrics.ts');
+  const {
+    loadInsight, recoveryInsight, zoneInsight, paceStabilityInsight,
+    efTrendInsight, decouplingInsight, seilerInsight, sleepDebtInsight,
+  } = await import('../src/utils/insights/insights.ts');
+  const {
+    engineEffectiveLtPace, estimateLthr, adaptationVerdict, buildCoachReport,
+    parseEngineBackup, buildCalibratedBackup,
+  } = await import('../src/utils/insights/coach.ts');
+
+  // ── validate：白名单校验 ──
+  const goodRun = { date: '2026-08-01', type: 'run', distanceKm: 5, avgPaceSec: 360, avgHr: 140, laps: [{ index: 1, distanceM: 1000, timeSec: 360, avgPaceSec: 360 }] };
+  const good = parseSnapshot({ version: 1, source: 'test', builtAt: 'x', fitness: { vo2max: 48, ltPaceSec: 278 }, activities: [goodRun], dailyMetrics: [] });
+  assert(good.ok === true, 'validate: 合法 snapshot 通过');
+  assert(parseSnapshot({ version: 2, source: 'x', activities: [goodRun] }).ok === false, 'validate: version≠1 拒绝');
+  assert(parseSnapshot({ version: 1, source: 'x', activities: [] }).ok === false, 'validate: 空活动拒绝');
+  assert(parseSnapshot('junk').ok === false, 'validate: 非对象拒绝');
+  const dirty = parseSnapshot({
+    version: 1, source: 'test', builtAt: 'x',
+    activities: [
+      goodRun,
+      { ...goodRun, avgPaceSec: 99999 },
+      { ...goodRun, date: 'bad-date' },
+      { ...goodRun, distanceKm: 500 },
+    ],
+    dailyMetrics: [{ date: '2026-08-01', restingHr: 999 }],
+  });
+  assert(dirty.ok === true && dirty.dropped > 0, 'validate: 脏数据进入计数');
+  if (dirty.ok) {
+    assert(dirty.snapshot.activities.length === 3, 'validate: 坏日期整条丢弃');
+    assert(dirty.snapshot.activities.find((a: ActualActivity) => a.avgPaceSec === undefined) !== undefined, 'validate: 超范围配速置空');
+    assert(dirty.snapshot.dailyMetrics[0].restingHr === undefined, 'validate: 超范围静息心率置空');
+  }
+
+  // ── zones：六区边界（LT=278）──
+  assert(paceToZone(278, 278) === 4, 'zones: LT 落 Z4');
+  assert(paceToZone(290, 278) === 4, 'zones: LT+12 仍 Z4');
+  assert(paceToZone(291, 278) === 3, 'zones: LT+13 落 Z3');
+  assert(paceToZone(330, 278) === 2, 'zones: LT+52 落 Z2');
+  assert(paceToZone(376, 278) === 1, 'zones: LT+98 落 Z1');
+  assert(paceToZone(265, 278) === 5, 'zones: LT-13 落 Z5');
+  assert(paceToZone(247, 278) === 6, 'zones: LT-31 落 Z6');
+  assert(paceToZone(undefined, 278) === null, 'zones: 无配速返回 null');
+
+  // ── metrics：周聚合 / 落区 / 分割 / 趋势 ──
+  const wRuns = [
+    { date: '2026-08-03', type: 'run', distanceKm: 10, durationSec: 3600 },
+    { date: '2026-08-05', type: 'run', distanceKm: 5, durationSec: 1800 },
+    { date: '2026-08-10', type: 'run', distanceKm: 8, durationSec: 2880 },
+    { date: '2026-08-12', type: 'strength', durationSec: 2400 },
+  ];
+  const wv = weeklyVolume(wRuns);
+  assert(wv.length === 2, 'metrics: 周聚合两周');
+  assert(Math.abs((wv[0]?.km ?? 0) - 15) < 0.01, 'metrics: 首周跑量 15km');
+  assert(wv[1]?.runCount === 1, 'metrics: 力量不进周跑量');
+  const zonedRun = {
+    date: '2026-08-01', type: 'run', distanceKm: 4,
+    laps: [
+      { index: 1, distanceM: 1000, timeSec: 380, avgPaceSec: 380 },
+      { index: 2, distanceM: 1000, timeSec: 350, avgPaceSec: 350 },
+      { index: 3, distanceM: 1000, timeSec: 280, avgPaceSec: 280 },
+      { index: 4, distanceM: 1000, timeSec: 270, avgPaceSec: 270 },
+    ],
+  };
+  const zd = zoneDistribution([zonedRun], 278);
+  assert(Math.abs(zd.shares.reduce((s, x) => s + x.km, 0) - 4) < 0.01, 'metrics: 落区总公里 4km');
+  assert(Math.abs((zd.shares.find((s) => s.zone === 4)?.pct ?? 0) - 50) < 0.01, 'metrics: Z4 占 50%');
+  const splitRun = {
+    date: '2026-08-01', type: 'run', distanceKm: 6,
+    laps: [350, 350, 350, 380, 380, 380].map((p, i) => ({ index: i + 1, distanceM: 1000, timeSec: p, avgPaceSec: p })),
+  };
+  const sp = splitHalves(splitRun);
+  assert(sp !== null && Math.abs(sp.diffSec - 30) < 0.01, 'metrics: 后半掉速 +30s');
+  assert(splitHalves({ ...splitRun, laps: splitRun.laps?.slice(0, 3) }) === null, 'metrics: 圈数不足 null');
+  const cooldownRun = {
+    date: '2026-08-13', type: 'run', distanceKm: 7,
+    laps: [...[383, 385, 386, 380, 376, 374].map((p, i) => ({ index: i + 1, distanceM: 1000, timeSec: p, avgPaceSec: p })),
+      { index: 7, distanceM: 500, timeSec: 300, avgPaceSec: 359 },
+      { index: 8, distanceM: 358, timeSec: 300, avgPaceSec: 835 }],
+  };
+  const spCd = splitHalves(cooldownRun);
+  assert(spCd !== null && Math.abs(spCd.diffSec) < 15, 'metrics: 冷身走圈被过滤');
+  assert((trendSlope([1, 2, 3, 4, 5]) ?? 0) > 0.9, 'metrics: 上升趋势');
+  assert(trendSlope([1, 2, 3]) === null, 'metrics: 样本不足 null');
+  assert(baseline([10, 20, 30]) === 20, 'metrics: 基线均值');
+
+  // ── 科学指标回归：EF / 解耦 / Seiler / 睡眠负债 ──
+  const efRuns = [
+    { date: '2026-08-01', type: 'run', distanceKm: 6, avgPaceSec: 380, avgHr: 140 },
+    { date: '2026-08-03', type: 'run', distanceKm: 6, avgPaceSec: 375, avgHr: 138 },
+    { date: '2026-08-05', type: 'run', distanceKm: 6, avgPaceSec: 370, avgHr: 136 },
+    { date: '2026-08-07', type: 'run', distanceKm: 6, avgPaceSec: 365, avgHr: 134 },
+    { date: '2026-08-08', type: 'run', distanceKm: 6, avgPaceSec: 290, avgHr: 165 },
+    { date: '2026-08-09', type: 'run', distanceKm: 3, avgPaceSec: 380, avgHr: 140 },
+  ];
+  const efSeries = efficiencyFactorSeries(efRuns, 278);
+  assert(efSeries.length === 4, 'EF: 只统计稳定有氧跑 4/6');
+  assert(Math.abs(efSeries[0].ef - (1000 / 380 * 60) / 140) < 0.001, 'EF: 公式 = 速度÷心率');
+  assert(efTrendInsight(efSeries)?.includes('上升') === true, 'EF: 上升洞察');
+  assert(efTrendInsight(efSeries.slice(0, 2)) === null, 'EF: 样本不足 null');
+  const driftLaps = Array.from({ length: 10 }, (_, i) => ({ index: i + 1, distanceM: 1000, timeSec: 360, avgPaceSec: 360, avgHr: i < 5 ? 140 : 150 }));
+  const dp = decouplingSeries([{ date: '2026-08-10', type: 'run', distanceKm: 10, laps: driftLaps }]);
+  assert(dp.length === 1 && dp[0].driftPct > 5, '解耦: 心率漂移为正');
+  assert(decouplingSeries([{ date: 'x', type: 'run', distanceKm: 10, laps: driftLaps.slice(0, 6) }]).length === 0, '解耦: 分圈不足不统计');
+  assert(decouplingInsight([{ date: 'x', driftPct: 3, distanceKm: 12 }])?.includes('扎实') === true, '解耦: <5% 判定');
+  const seilerRun = { ...zonedRun, laps: [...(zonedRun.laps ?? []), ...(zonedRun.laps ?? []), ...(zonedRun.laps ?? [])].map((l, i) => ({ ...l, index: i + 1 })) };
+  const seiler = seilerDistribution([seilerRun], 278, 28, '2026-08-15');
+  assert(seiler !== null && Math.abs(seiler.lowPct + seiler.midPct + seiler.highPct - 100) < 0.01, 'Seiler: 三区总和 100%');
+  assert(seilerDistribution([{ ...seilerRun, date: '2026-06-01' }], 278, 28, '2026-08-15') === null, 'Seiler: 窗口外不计入');
+  assert(seilerInsight({ lowPct: 95, midPct: 4, highPct: 1 })?.includes('高强度刺激') === true, 'Seiler: 缺强度判定');
+  assert(seilerInsight({ lowPct: 80, midPct: 8, highPct: 12 })?.includes('极化模型') === true, 'Seiler: 80/20 判定');
+  assert(seilerInsight({ lowPct: 40, midPct: 50, highPct: 10 })?.includes('灰区') === true, 'Seiler: 灰区陷阱判定');
+  const debtMetrics = Array.from({ length: 14 }, (_, i) => ({ date: `2026-08-${String(i + 1).padStart(2, '0')}`, sleepMinutes: 360 }));
+  const debt = sleepDebt(debtMetrics);
+  assert(debt !== null && debt.debtMin === 840, '睡眠负债: 14×60=840min');
+  assert(sleepDebtInsight(debt)?.includes('负债') === true, '睡眠负债: 重债预警');
+  assert(sleepDebtInsight(sleepDebt(debtMetrics.map((m) => ({ ...m, sleepMinutes: 460 })))) === null, '睡眠负债: 充足不报警');
+
+  // ── 规则句回归 ──
+  const highLoadDays = Array.from({ length: 7 }, (_, i) => ({ date: `2026-08-${String(i + 8).padStart(2, '0')}`, loadRatio: 1.55, loadComment: 'Excessive' }));
+  assert(loadInsight(highLoadDays)?.includes('Excessive') === true, '规则: 连续 Excessive 预警');
+  assert(loadInsight(highLoadDays.slice(0, 2)) === null, '规则: 负荷数据不足 null');
+  const tiredDays = [
+    ...Array.from({ length: 10 }, (_, i) => ({ date: `2026-07-${String(i + 20).padStart(2, '0')}`, restingHr: 55, sleepMinutes: 450, hrvMs: 75, hrvBaseline: 72 })),
+    ...Array.from({ length: 7 }, (_, i) => ({ date: `2026-08-${String(i + 8).padStart(2, '0')}`, restingHr: 62, sleepMinutes: 330, hrvMs: 60, hrvBaseline: 72 })),
+  ];
+  const ri = recoveryInsight(tiredDays);
+  assert(ri?.includes('静息心率') === true && ri?.includes('睡眠') === true && ri?.includes('HRV') === true, '规则: 疲劳三联预警');
+  assert(paceStabilityInsight([splitRun, splitRun, splitRun])?.includes('掉速') === true, '规则: 掉速洞察');
+  assert(paceStabilityInsight([splitRun]) === null, '规则: 样本不足 null');
+
+  // ── coach：引擎 LT 解析链 / LTHR / 裁决 / 报告 / 备份桥 ──
+  const baseProfile = {
+    height: 175, weight: 70, pb5k: '23:00', pb10k: '48:00', pbHalf: '1:46:00', pbFull: '',
+    lthr: '', ltPace: '', raceDate: '2026-12-01', raceType: 'full', goalTime: '3:45:00',
+    intensity: 'moderate', longRunDay: 0,
+  };
+  assert(engineEffectiveLtPace({ ...baseProfile, ltPace: '4:30' })?.source === '手动填写的 LT', 'coach: 手动 LT 第一优先');
+  assert(Math.abs((engineEffectiveLtPace(baseProfile)?.paceSec ?? 0) - (6360 / 21.1) * 0.93) < 0.01, 'coach: 半马推算公式');
+  assert(engineEffectiveLtPace({ ...baseProfile, pbHalf: '', pbFull: '3:40:00' })?.source === '全马 PB 推算', 'coach: 降级顺序');
+  assert(engineEffectiveLtPace({ ...baseProfile, pb5k: '', pb10k: '', pbHalf: '', pbFull: '' }) === null, 'coach: 无成绩 null');
+  const lthrSnapshot = {
+    version: 1, source: 'test', builtAt: 'x', fitness: { ltPaceSec: 278 },
+    activities: [{ date: '2026-08-01', type: 'run', distanceKm: 10, laps: [
+      { index: 1, distanceM: 1000, timeSec: 278, avgPaceSec: 278, avgHr: 164 },
+      { index: 2, distanceM: 1000, timeSec: 280, avgPaceSec: 280, avgHr: 166 },
+      { index: 3, distanceM: 1000, timeSec: 276, avgPaceSec: 276, avgHr: 168 },
+      { index: 4, distanceM: 1000, timeSec: 380, avgPaceSec: 380, avgHr: 140 },
+    ] }],
+    dailyMetrics: [],
+  } as never;
+  assert(estimateLthr(lthrSnapshot) === 166, 'coach: LTHR = LT 带均值');
+  assert(estimateLthr({ ...lthrSnapshot, activities: [{ ...(lthrSnapshot as { activities: unknown[] }).activities[0] as object, laps: [{ index: 1, distanceM: 1000, timeSec: 278, avgPaceSec: 278, avgHr: 164 }] }] } as never) === null, 'coach: LTHR 样本不足 null');
+  const riskyMetrics = [
+    ...Array.from({ length: 10 }, (_, i) => ({ date: `2026-07-${String(i + 10).padStart(2, '0')}`, restingHr: 55, sleepMinutes: 450, hrvMs: 75, hrvBaseline: 72, loadRatio: 1.0, loadComment: 'Optimized' })),
+    ...Array.from({ length: 7 }, (_, i) => ({ date: `2026-08-${String(i + 8).padStart(2, '0')}`, restingHr: 62, sleepMinutes: 330, hrvMs: 60, hrvBaseline: 72, loadRatio: 1.6, loadComment: 'Excessive' })),
+  ];
+  assert(adaptationVerdict({ version: 1, source: 'x', builtAt: 'x', activities: [], dailyMetrics: riskyMetrics, recovery: { pct: 30 } } as never)?.factor === 0.90, 'coach: 多重风险 → 0.90');
+  assert(adaptationVerdict({ version: 1, source: 'x', builtAt: 'x', activities: [], dailyMetrics: [] } as never) === null, 'coach: 数据不足不出裁决');
+  const calProfile = { ...baseProfile, pbHalf: '1:50:00', pbFull: '3:50:00' };
+  const report = buildCoachReport({
+    version: 1, source: 'coros-mcp', builtAt: '2026-08-16T00:00:00Z', device: 'COROS VERTIX 2S',
+    fitness: { ltPaceSec: 278, predictions: { full: '3:37:47' } }, activities: [], dailyMetrics: riskyMetrics, recovery: { pct: 30 },
+  } as never, calProfile);
+  assert(report.schema === 'marathon-coach-rx' && report.version === 1, 'coach: 报告 schema');
+  const ltRec = report.recommendations.find((r) => r.id === 'lt-pace');
+  assert(ltRec?.autoPatch === true && ltRec?.recommendedValue === '4:38', 'coach: LT 校准触发');
+  assert(report.patch.ltPace === '4:38', 'coach: 补丁含 ltPace');
+  assert(report.recommendations.some((r) => r.id === 'pb-reference'), 'coach: PB 参照');
+  assert(report.recommendations.some((r) => r.id === 'goal-feasibility'), 'coach: 目标可行性');
+  const engineBackup = {
+    schema: 'marathon-backup', version: 1, app: 'marathon-training', exportedAt: '2026-08-15T00:00:00.000Z',
+    data: { profile: { ...baseProfile }, plan: [], completions: { '2026-08-10': { status: 'full', rpe: 2 } }, myRaces: [], vacations: [], isPlanGenerated: false, planNeedsRegen: false, exportSync: {} },
+  };
+  const bridgeOk = parseEngineBackup(JSON.stringify(engineBackup));
+  assert(bridgeOk.ok === true, 'coach: 合法备份解析通过');
+  assert(parseEngineBackup(JSON.stringify({ ...engineBackup, schema: 'other' })).ok === false, 'coach: 错误 schema 拒绝');
+  assert(parseEngineBackup(JSON.stringify({ ...engineBackup, data: { ...engineBackup.data, profile: { ...baseProfile, hack: 1 } } })).ok === false, 'coach: 未知 profile 字段拒绝');
+  if (bridgeOk.ok) {
+    const patched = JSON.parse(buildCalibratedBackup(bridgeOk.backup, { ltPace: '4:38', lthr: 166 }));
+    assert(patched.data.profile.ltPace === '4:38' && patched.data.profile.lthr === 166, 'coach: 补丁写入');
+    assert(JSON.stringify(patched.data.completions) === JSON.stringify(engineBackup.data.completions) && patched.data.profile.pbHalf === '1:46:00', 'coach: 其余原样保留');
+  }
+}
+
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);
 process.exit(failed > 0 ? 1 : 0);

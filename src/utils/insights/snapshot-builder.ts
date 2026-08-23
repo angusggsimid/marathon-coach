@@ -1,5 +1,4 @@
-// 浏览器版快照构建：COROS MCP 原始文本 → CorosSnapshot。
-// 与 scripts/build-coros-snapshot.mjs 同一套解析规则（单一口径，两处同步维护）。
+// 快照解析的唯一事实源：COROS MCP 原始文本 → 归一化快照。
 import type { ActualActivity, CorosSnapshot, DailyMetric, LapPoint } from './types';
 
 export interface SyncRawData {

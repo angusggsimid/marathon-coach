@@ -28,7 +28,7 @@
 
 ## 第一部分：GitHub 上传代码
 
-> 当前状态：已完成。仓库地址为 `https://github.com/angusggsimid/marathon`，分支为 `main`。
+> 当前状态：已完成。仓库地址为 `https://github.com/angusggsimid/marathon-coach`，分支为 `main`。
 
 ### 1-1. 安装 Git（已有则跳过）
 

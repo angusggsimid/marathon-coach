@@ -1,4 +1,4 @@
-// coros-snapshot.json 的类型定义（与 scripts/build-coros-snapshot.mjs 输出对齐）
+// 归一化快照类型定义：snapshot-builder/coros-sync 的输出契约，也是手动导入 .json 的校验目标。
 
 export interface LapPoint {
   index: number;

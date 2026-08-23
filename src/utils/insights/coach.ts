@@ -70,6 +70,13 @@ export interface CoachReport {
 
 // ─── 引擎 LT 解析链（逐行复刻主 App resolveLTPaceSec，保证对照口径一致）───────
 
+/** 档案字段格式（m:ss，与引擎 UserProfile.ltPace 及 store 校验正则一致；区别于展示格式 m'ss"） */
+function formatPaceColon(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function timeToSeconds(timeStr: string): number {
   if (!timeStr) return 0;
   const parts = timeStr.split(':').map(Number);
@@ -222,7 +229,7 @@ function ltRecommendation(snapshot: CorosSnapshot, profile: EngineProfile | null
       title: 'LT 已校准',
       target: 'profile.ltPace',
       currentValue: formatPace(current.paceSec),
-      recommendedValue: formatPace(measured),
+      recommendedValue: formatPaceColon(measured),
       confidence: 'high',
       autoPatch: false,
       evidence: [`引擎当前值与 COROS 实测差 ${Math.round(delta)}s/km，无需调整`],
@@ -234,7 +241,7 @@ function ltRecommendation(snapshot: CorosSnapshot, profile: EngineProfile | null
     title: 'LT 校准（实测阈值）',
     target: 'profile.ltPace',
     currentValue: current ? `${formatPace(current.paceSec)}（${current.source}）` : '未导入引擎档案',
-    recommendedValue: formatPace(measured),
+    recommendedValue: formatPaceColon(measured),
     confidence: 'high',
     autoPatch: true,
     evidence: [
