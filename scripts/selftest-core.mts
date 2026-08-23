@@ -1636,5 +1636,96 @@ console.log('\n── insights 库回归（validate/zones/metrics/规则/coach�
   }
 }
 
+console.log('\n── P3-1 回归：FIT 编码 / 赛事覆盖层 / 打卡文案 ──');
+{
+  // checkin-messages 的 markShown 需要 localStorage
+  const lsStore = new Map<string, string>();
+  (globalThis as Record<string, unknown>).localStorage = {
+    getItem: (k: string) => (lsStore.has(k) ? lsStore.get(k)! : null),
+    setItem: (k: string, v: string) => { lsStore.set(k, v); },
+    removeItem: (k: string) => { lsStore.delete(k); },
+  };
+
+  const { encodeFIT } = await import('../src/utils/export-fit.ts');
+  const { applyRaceOverlays } = await import('../src/utils/race-plan-overlay.ts');
+  const { getCheckInMessage } = await import('../src/utils/checkin-messages.ts');
+
+  // ── export-fit：FIT 二进制结构 ──
+  const wk: import('../src/utils/training-engine.ts').DailyWorkout = {
+    date: new Date('2026-08-20T04:00:00Z'),
+    workoutType: 'Tempo',
+    description: '节奏跑 8k',
+    targetPace: "5'00\"-5'30\"",
+    distanceKm: 8,
+  };
+  const fit = encodeFIT(wk);
+  assert(fit.length > 40, 'FIT: 有内容');
+  const magic = String.fromCharCode(fit[8], fit[9], fit[10], fit[11]);
+  assert(magic === '.FIT', 'FIT: 魔数 .FIT');
+  const crc = fit[fit.length - 2] | (fit[fit.length - 1] << 8);
+  assert(crc !== 0, 'FIT: 有 CRC');
+  // 头部 data size = 文件长度 - 14 头 - 2 CRC
+  const dataSize = fit[4] | (fit[5] << 8) | (fit[6] << 16) | (fit[7] << 24);
+  assert(dataSize === fit.length - 16, 'FIT: 数据长度字段正确');
+  // 三种消息：file_id(0) / workout(26) / workout_step(27) 的定义消息头存在
+  //（data 消息变长，需按 local type 的字段总长推进）
+  const fieldSizeByLocal = new Map<number, number>();
+  const defs: number[] = [];
+  for (let i = 14; i < fit.length - 2;) {
+    const h = fit[i];
+    if (h & 0x40) {
+      const local = h & 0x0F;
+      const count = fit[i + 5];
+      let size = 0;
+      for (let f = 0; f < count; f++) size += fit[i + 6 + f * 3 + 1];
+      fieldSizeByLocal.set(local, size);
+      defs.push(fit[i + 3] | (fit[i + 4] << 8));
+      i += 6 + count * 3;
+    } else {
+      i += 1 + (fieldSizeByLocal.get(h & 0x0F) ?? 0);
+    }
+  }
+  assert(defs.includes(0) && defs.includes(26) && defs.includes(27), 'FIT: file_id/workout/step 消息齐全');
+
+  // ── race-plan-overlay：减量 / 恢复 / 比赛日注入 ──
+  // 主赛事 = 计划最后一天（08-30 全马）；次赛事放计划早期（08-04），避开 21 天双减量保护
+  const planDates = (start: Date, days: number): import('../src/utils/training-engine.ts').DailyWorkout[] =>
+    Array.from({ length: days }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return { date: d, workoutType: i % 7 === 0 ? 'LSD' : 'Easy', description: 'base', distanceKm: i % 7 === 0 ? 18 : 8 };
+    });
+  const base = planDates(new Date('2026-08-03T04:00:00Z'), 28);
+  // 主赛事 = 计划最后一天：引擎已在其上生成 Race 课（模拟引擎输出）
+  base[27] = { ...base[27], workoutType: 'Race', description: '主马拉松', distanceKm: 42.195 };
+  const races: import('../src/store/useStore.ts').MyRace[] = [
+    { raceId: 'r1', distance: 'full', goal: 'pb', addedAt: 'x', name: '主马拉松', date: '2026-08-30', city: '', province: '', status: 'open' },
+    { raceId: 'r2', distance: 'full', goal: 'pb', addedAt: 'x', name: '次马拉松', date: '2026-08-04', city: '', province: '', status: 'open' },
+  ];
+  const overlaid = applyRaceOverlays(base, races, 'full');
+  // 主赛事日保持引擎注入的 Race 不变（overlay 双减量保护不覆盖主赛事）
+  assert(overlaid[27]?.workoutType === 'Race', '覆盖: 主赛事日 Race 保持');
+  // 次赛事（避开 21 天保护）注入 Race
+  assert(overlaid[1]?.workoutType === 'Race', '覆盖: 次赛事日注入 Race');
+  // 次赛前减量：08-03（LSD 基础 18km，比赛前 1 天）跑量应显著低于基础
+  const pre1 = overlaid[0];
+  assert(pre1 && (pre1.distanceKm ?? 0) < 12, '覆盖: 赛前减量生效');
+  // 恢复：次赛后第 1 天（08-05）类型 Recovery/Easy 且跑量低于基础
+  const post1 = overlaid[2];
+  assert(post1 && (post1.workoutType === 'Recovery' || post1.workoutType === 'Easy') && (post1.distanceKm ?? 0) < 8, '覆盖: 赛后恢复减量');
+  // 无赛事 → 原样返回
+  assert(applyRaceOverlays(base, [], 'full') === base, '覆盖: 无赛事原样返回');
+
+  // ── checkin-messages：分类池 ──
+  const skipMsg = getCheckInMessage('skip', 2, 'Easy');
+  assert(typeof skipMsg.id === 'string' && skipMsg.id.length > 0 && skipMsg.text.length > 0, '文案: skip 返回有效消息');
+  const partialMsg = getCheckInMessage('partial', 2, 'Easy');
+  assert(partialMsg.text.length > 0, '文案: partial 返回有效消息');
+  const fullMsg = getCheckInMessage('full', 3, 'Interval');
+  assert(fullMsg.text.length > 0, '文案: full 高 RPE 返回有效消息');
+  const easyMsg = getCheckInMessage('full', 1, 'LSD');
+  assert(easyMsg.text.length > 0, '文案: full 低 RPE 返回有效消息');
+}
+
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);
 process.exit(failed > 0 ? 1 : 0);
