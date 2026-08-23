@@ -6,6 +6,7 @@ import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import { countStreak } from '../utils/checkin-streak';
 import { computeACWR } from '../utils/acwr';
+import WeatherHintCard from './WeatherHintCard';
 import type { CheckInMessage } from '../utils/checkin-messages';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Activity, Footprints, Flame, AlertTriangle, CheckCircle2, CalendarPlus, Download, Umbrella, Trash2, Share2, Copy, ChevronDown } from 'lucide-react';
 import { downloadICS } from '../utils/export-ics';
@@ -1262,6 +1263,7 @@ export function CalendarView() {
               />
             </div>
           </div>
+          <WeatherHintCard plan={plan} />
           <div>
             {weekDays.map((dayItem, idx) => {
               const workout = plan.find(w => isSameDay(new Date(w.date), dayItem));

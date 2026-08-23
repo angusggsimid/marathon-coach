@@ -102,6 +102,8 @@ import { countStreak } from '../src/utils/checkin-streak.ts';
 import { computeACWR } from '../src/utils/acwr.ts';
 import { getSuppressedRaces } from '../src/utils/race-plan-overlay.ts';
 import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
+import { heatAdjustment } from '../src/utils/heat-adjust.ts';
+import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
 
 let passed = 0;
 let failed = 0;
@@ -2020,6 +2022,66 @@ console.log('\n── TE 执行质量验证 ──');
   ]);
   const easySug = rHigh.find(s => s.dateStr === '2026-08-21');
   assert(easySug?.status === 'full' && (easySug.teNote ?? '').includes('偏硬'), 'TE集成: Easy 高 TE 提示但保持 full');
+}
+
+console.log('\n── 高温环境配速 ──');
+{
+  // 低于阈值不提示
+  assert(heatAdjustment('Easy', 25) === null, '高温: <26°C 不提示');
+  // Rest/Race 不提示（比赛策略属后续范围）
+  assert(heatAdjustment('Rest', 33) === null, '高温: Rest 不提示');
+  assert(heatAdjustment('Race', 33) === null, '高温: Race 暂不提示');
+
+  // 基础档位
+  const a1 = heatAdjustment('Easy', 27);
+  assert(a1?.paceAddSecPerKm === 8, '高温: 26-28°C → +8s');
+  const a2 = heatAdjustment('Easy', 29.5);
+  assert(a2?.paceAddSecPerKm === 12, '高温: 28-30°C → +12s');
+
+  // 质量课 ×1.3
+  const a3 = heatAdjustment('Tempo', 29.5);
+  assert(a3?.paceAddSecPerKm === Math.round(12 * 1.3), '高温: 质量课 ×1.3');
+
+  // 高湿加重
+  const a4 = heatAdjustment('Easy', 31, 80);
+  assert(a4?.paceAddSecPerKm === 18 + 5, '高温: 31°C+80%湿度 → +23s');
+
+  // 极端封顶 40s
+  const a5 = heatAdjustment('Tempo', 35, 85);
+  assert(a5 !== null && a5.paceAddSecPerKm <= 40 && a5.paceAddSecPerKm >= 30,
+    '高温: 极端情况封顶 ≤40s', `got=${a5?.paceAddSecPerKm}`);
+
+  // ≥30°C 建议改晨跑
+  assert((heatAdjustment('LSD', 31)?.advice ?? '').includes('晨跑'), '高温: ≥30°C 建议晨跑');
+}
+
+console.log('\n── 天气数据：解析与缓存节流 ──');
+{
+  const sample = {
+    hourly: {
+      time: ['2026-08-24T00:00', '2026-08-24T14:00', '2026-08-25T08:00'],
+      temperature_2m: [28.1, 34.6, 31.2],
+      relative_humidity_2m: [80, 70, 85],
+    },
+  };
+  const days = parseOpenMeteo(sample);
+  assert(days.length === 2, '天气: 解析出两天');
+  const d24 = days.find(d => d.date === '2026-08-24');
+  const d25 = days.find(d => d.date === '2026-08-25');
+  assert(d24?.tempMaxC === 34.6 && d24?.humidityMean === 75, '天气: 日最高温/均湿正确',
+    JSON.stringify(d24));
+  assert(d25?.tempMaxC === 31.2 && d25?.humidityMean === 85, '天气: 第二天正确');
+
+  assert(parseOpenMeteo({ hourly: { time: [], temperature_2m: [], relative_humidity_2m: [] } }).length === 0,
+    '天气: 空数据 → 空');
+
+  // 缓存节流：24h
+  const now = new Date('2026-08-23T12:00:00Z');
+  assert(shouldRefetchWeather(null, now) === true, '缓存: 无缓存要刷新');
+  const fresh = { fetchedAt: new Date(now.getTime() - 2 * 3600000).toISOString() };
+  assert(shouldRefetchWeather(fresh, now) === false, '缓存: 2h 内不刷新');
+  const stale = { fetchedAt: new Date(now.getTime() - 25 * 3600000).toISOString() };
+  assert(shouldRefetchWeather(stale, now) === true, '缓存: 超 24h 刷新');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);
