@@ -50,18 +50,19 @@ scripts/selftest-core.mts    # 引擎/算法/接口自测（372 用例）
 
 ## 五、训练引擎与数据闭环
 
-1. **引擎**（`training-engine.ts`，纯函数）：PB → VDOT → 周期化（基础/强度/峰值/减量）+ COROS EvoLab 六区间（`paceToZoneSec` 为单一事实源）。
+1. **引擎**（`training-engine.ts`，纯函数）：PB / 设备实测 VO₂max（`vdotOverride` 只升不降）→ 块周期化——基础爬坡 → 每 4 周深砍恢复（-38%）→ 峰值高原 → 赛前减量（按距赛天数驱动：赛周零 Z4、MP-only、shakeout 化）；长跑 ≤35% 周跑量（装配后硬约束）、单峰封顶 + 3.5h 时长上限；专项期隔周 MP 长距离递进（15→35%）。剂量经 COROS 同级 16 周方案交叉校准。COROS EvoLab 六区间 `paceToZoneSec` 为单一事实源。
 2. **周自适应**：`factor = min(主观打卡, COROS 客观六信号)`，周期层（解耦>10%/EF 下滑）封顶 ≤1.0，用户可一键否决。
 3. **课级就绪门**：近 3 天恢复信号差 → 3 天内第一个强度课自动降级为轻松跑（可否决）。
 4. **数据源**：
    - COROS：OAuth 直连（官方 MCP），按设定频率自动同步活动/负荷/睡眠/HRV/体能评估；
    - Garmin：拖拽 .fit 导入（执行侧维度全量，恢复侧缺省并诚实标注）；
    - 手动：coros-snapshot.json。
-5. **测试纪律**：引擎/算法/接口全部纯函数 + 372 用例（`npm run test:core`）。
+5. **测试纪律**：引擎/算法/接口全部纯函数 + 504 用例（`npm run test:core`），含 half/full × light/mod/heavy × VDOT 三档的 18 组合矩阵回归。
 
 ## 六、关键文档索引
 
 - `README.md` — 公开门面（中英）
+- `CHANGELOG.md` — 更新日志（面向用户的可感知变化，倒序）
 - `DEPLOY.md` — 部署手册
 - `AGENTS.md` — 项目规则（本仓库工作方式）
 - `ADR_PWA_MCP_ARCHITECTURE_2026-08-15.md` — PWA 形态与 MCP 架构决策
