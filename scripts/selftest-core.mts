@@ -101,7 +101,7 @@ import {
 import { countStreak } from '../src/utils/checkin-streak.ts';
 import { computeACWR } from '../src/utils/acwr.ts';
 import { getSuppressedRaces } from '../src/utils/race-plan-overlay.ts';
-import { getProfilePlanMismatch } from '../src/utils/training-engine.ts';
+import { getProfilePlanMismatch, getBaseCapacityFromVDOT, resolveVDOT } from '../src/utils/training-engine.ts';
 import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
 import { heatAdjustment } from '../src/utils/heat-adjust.ts';
 import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
@@ -2247,6 +2247,81 @@ console.log('\n── 批次一：taper 红线 + 档案一致性守卫 ──');
   assert(getProfilePlanMismatch(fp, driftedPlan) === 'race-type-drift', '守卫: 项目漂移检测');
   // 空计划不误报
   assert(getProfilePlanMismatch(fp, []) === null, '守卫: 空计划不报');
+}
+
+console.log('\n── 批次二：剂量体系（映射校准/35%钳制/封顶/cutback）──');
+{
+  const Z4 = new Set(['Tempo', 'TempoIntervals', 'Interval', 'Cruise', 'Fartlek', 'Progression', 'Hills']);
+  const asOf16w = new Date();
+  const raceIn = (days: number) => format(addDays(asOf16w, days), 'yyyy-MM-dd');
+
+  // ── C2：容量映射校准（COROS 交叉验证 +10%）──
+  assert(Math.abs(getBaseCapacityFromVDOT(48, 'full') - 77.6) < 0.01,
+    '映射: VDOT48 全马容量 → 77.6', String(getBaseCapacityFromVDOT(48, 'full')));
+  const h48 = getBaseCapacityFromVDOT(48, 'half');
+  assert(h48 > 60 && h48 < 64, '映射: half 中段同步上调', String(h48));
+
+  // ── 结构断言：16 周全马 moderate ──
+  const dp = baseProfile({ raceType: 'full', raceDate: raceIn(112), intensity: 'moderate' });
+  const dPlan = generateTrainingPlan(dp, asOf16w);
+  assert(dPlan.length > 0, '剂量: 计划生成');
+  const weeks: { km: number; lr: number }[] = [];
+  for (let w = 0; w < Math.ceil(dPlan.length / 7); w++) {
+    const wk = dPlan.slice(w * 7, (w + 1) * 7);
+    if (!wk.length) break;
+    weeks.push({
+      km: Math.round(wk.reduce((s, d) => s + (d.distanceKm ?? 0), 0)),
+      lr: Math.max(0, ...wk.filter(d => d.workoutType === 'LSD').map(d => d.distanceKm ?? 0)),
+    });
+  }
+  const train = weeks.slice(0, weeks.length - 3); // 全马 taper 固定 3 周
+
+  // 恢复周按引擎固定 3:1 节奏结构性识别（cycleLength=4 → 第 4/8/12 周，0-based 3/7/11）
+  const recSet = new Set([3, 7, 11].filter(i => i < train.length));
+
+  // 峰值周：与「该档案 VDOT 推导的理论峰值」±10%
+  const vdotDp = resolveVDOT(dp);
+  const expPeak = Math.round(getBaseCapacityFromVDOT(vdotDp, 'full') * 0.95);
+  const peakKm = Math.max(...train.map(w => w.km));
+  assert(Math.abs(peakKm - expPeak) <= Math.max(3, expPeak * 0.08),
+    '剂量: 峰值周贴合 VDOT 推导 ±8%', `peak=${peakKm} exp=${expPeak} vdot=${vdotDp.toFixed(1)}`);
+  // 绝对锚点：快档案（半马 1:35 → VDOT≈48）峰值应命中 COROS 带 68-78
+  const fastProf = baseProfile({ raceType: 'full', raceDate: raceIn(112), intensity: 'moderate', pbHalf: '1:35:00' });
+  const fastPlan = generateTrainingPlan(fastProf, asOf16w);
+  const fastWeeks: number[] = [];
+  for (let w = 0; w < Math.ceil(fastPlan.length / 7); w++) {
+    fastWeeks.push(Math.round(fastPlan.slice(w * 7, (w + 1) * 7).reduce((s2, d) => s2 + (d.distanceKm ?? 0), 0)));
+  }
+  const fastTrain = fastWeeks.slice(0, fastWeeks.length - 3);
+  const fastPeak = Math.max(...fastTrain);
+  assert(fastPeak >= 68 && fastPeak <= 78, '剂量: VDOT≈48 峰值周命中 68-78（COROS 带）', `fastPeak=${fastPeak}`);
+
+  // 严格 35% 钳制：非 taper 且非恢复周全部适用（用户拍板：无放宽分支）
+  const viol35 = train.filter((w, i) => !recSet.has(i) && w.lr > Math.ceil(w.km * 0.35) + 1);
+  assert(viol35.length === 0, '剂量: 非 taper/恢复周长跑 ≤35%', JSON.stringify(viol35));
+
+  // cutback：结构位深度 -20~-38%（0.72 目标 ± 组装容差）
+  assert(recSet.size === 3, 'cutback: 3:1 节奏存在');
+  for (const i of recSet) {
+    const r = train[i].km / train[i - 1].km;
+    assert(r > 0.60 && r < 0.82, 'cutback: 深度落在 -20~-38% 带', `i=${i} ratio=${r.toFixed(2)}`);
+  }
+
+  // plateau 可达性：最后 4 个训练周内出现 ≥92% 峰值
+  const tailMax = Math.max(...train.slice(-4).map(w => w.km));
+  assert(tailMax >= peakKm * 0.92, '装配: plateau 可达（尾段 ≥92% 峰值）', `${tailMax}/${peakKm}`);
+
+  // 峰值长跑：moderate 封顶 30 且 ≤35%
+  const peakLR = Math.max(...train.map(w => w.lr));
+  assert(peakLR <= 30 && peakLR >= 18, '封顶: moderate 峰值长跑 18-30km', String(peakLR));
+
+  // 时长封顶：heavy + 慢速 LT（清空 PB 强制走 LT 通道）→ LSD 受 3.5h 约束
+  const slowHeavy = baseProfile({ raceType: 'full', raceDate: raceIn(112), intensity: 'heavy',
+    pb5k: '', pb10k: '', pbHalf: '', pbFull: '', ltPace: '6:30' });
+  const slowPlan = generateTrainingPlan(slowHeavy, asOf16w);
+  const slowLr = Math.max(0, ...slowPlan.filter((w, i) => i < slowPlan.length - 21)
+    .map(w => w.workoutType === 'LSD' ? w.distanceKm ?? 0 : 0));
+  assert(slowLr <= 26, '封顶: 慢速 heavy 长跑受时长约束 ≤26km', String(slowLr));
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

@@ -205,8 +205,9 @@ export const PLAN_BLOCK_MESSAGES: Record<PlanBlockReason, string> = {
 
 // Base peak weekly mileage from VDOT (Jack Daniels + RRCA reference)
 export function getBaseCapacityFromVDOT(vdot: number, raceType: 'half' | 'full'): number {
-  const fullMap: Record<number, number> = { 30: 40, 40: 55, 50: 75, 60: 100, 70: 130 };
-  const halfMap: Record<number, number> = { 30: 30, 40: 45, 50: 60, 60: 85, 70: 110 };
+  // 中段锚点经 COROS 同跑者 16 周方案外部交叉校准（+10%）：VDOT48 → 全马峰值 ~73km
+  const fullMap: Record<number, number> = { 30: 40, 40: 60, 50: 82, 60: 100, 70: 130 };
+  const halfMap: Record<number, number> = { 30: 30, 40: 49, 50: 66, 60: 85, 70: 110 };
   const map = raceType === 'half' ? halfMap : fullMap;
   const keys = Object.keys(map).map(Number).sort((a, b) => a - b);
   if (vdot <= keys[0]) return map[keys[0]];
@@ -427,7 +428,7 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
   //    Taper: 3 weeks exponential decay (Bosquet meta-analysis)
   const targetVolumes: number[] = [];
   const cycleLength = 4; // universal 3:1 (3 build + 1 recovery)
-  const recoveryDepth = 0.83; // only -17%, prevents huge bounce-back
+  const recoveryDepth = 0.72; // -28%，落在文献带 -25~-30%（3:1 build-recovery 标准）
 
   // Half marathon taper = 2 weeks (Pfitzinger/Daniels); full = 3 weeks
   const taperWeeksForRace = profile.raceType === 'half' ? 2 : 3;
@@ -482,11 +483,11 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
         targetVolume = peakMPW;
       }
 
-      // Cap weekly increase at 9% over previous non-recovery week
+      // 增幅上限：连续建设周 +9%；恢复周后的追赶周 +15%（保证 plateau 数学可达）
       if (w > 0) {
-        const prevNonRecovery = w >= 2 && targetVolumes[w - 1] < targetVolumes[w - 2] * 0.90
-          ? targetVolumes[w - 2] : targetVolumes[w - 1];
-        targetVolume = Math.min(targetVolume, prevNonRecovery * 1.09);
+        const prevWasRecovery = w >= 2 && targetVolumes[w - 1] < targetVolumes[w - 2] * 0.90;
+        const prevNonRecovery = prevWasRecovery ? targetVolumes[w - 2] : targetVolumes[w - 1];
+        targetVolume = Math.min(targetVolume, prevNonRecovery * (prevWasRecovery ? 1.15 : 1.09));
       }
     }
     targetVolumes.push(Math.round(targetVolume));
@@ -528,7 +529,7 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
     const minLSDKm = Math.round(minLSD_early + (minLSD_peak - minLSD_early) * Math.min(1, progress * 1.5));
 
     const PEAK_LSD = profile.raceType === 'full'
-      ? { light: 30, moderate: 32, heavy: 34 }[profile.intensity]
+      ? { light: 30, moderate: 30, heavy: 34 }[profile.intensity]
       : { light: 18, moderate: 20, heavy: 22 }[profile.intensity];
 
     const startLSD = Math.max(minLSDKm, minLSD_early);
@@ -553,17 +554,23 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       lsdDistance = Math.max(minLSDKm, lsdDistance * 0.82);
     }
 
-    lsdDistance = Math.round(lsdDistance);
+    // 时长封顶：单次长跑 ≤3.5h（Z2 慢端配速估算——慢跑者自动收紧）
+    const timeCapKm = Math.floor(12600 / (ltSec + 97));
+    lsdDistance = Math.round(Math.min(lsdDistance, timeCapKm));
 
-    // During taper/recovery weeks, LSD legitimately takes a larger slice of reduced volume.
-    // Using the normal cap would force weekVolume ABOVE target (e.g. 16km LSD / 0.40 = 40km
-    // minimum, which exceeds a 36km taper target — defeating the whole taper).
-    // Pfitzinger taper design: LSD = 60–70% of a reduced week is normal and expected.
-    const lsdCapRatio = (isTaperWeek || isRecovery)
-      ? 0.65
-      : profile.raceType === 'full' ? (baseWeekVolume <= 60 ? 0.50 : 0.45) : 0.42;
-    const minWeekVolumeForLSD = Math.ceil(lsdDistance / Math.max(0.25, lsdCapRatio));
-    let weekVolume = Math.max(baseWeekVolume, minWeekVolumeForLSD);
+    let weekVolume: number;
+    if (isTaperWeek || isRecovery) {
+      // 减量/恢复周：LSD 合理占据削减周量的更大份额（Pfitzinger 减量设计 60-70%），
+      // 普通占比帽会使周量被顶到减量目标之上——保留抬举机制
+      const minWeekVolumeForLSD = Math.ceil(lsdDistance / 0.65);
+      weekVolume = Math.max(baseWeekVolume, minWeekVolumeForLSD);
+    } else {
+      // 普通周严格 35% 钳制（Daniels 25-30% 带的工程上界）：钳长跑、不抬周量——
+      // 尾巴不再摇狗（旧机制曾把公式目标 48km 抬成 64km 假峰）
+      weekVolume = baseWeekVolume;
+      lsdDistance = Math.min(lsdDistance, Math.round(baseWeekVolume * 0.35));
+    }
+    lsdDistance = Math.max(minLSDKm, Math.min(lsdDistance, timeCapKm));
 
     // --- Intensity session count: varies by phase (Daniels/Pfitzinger best practice) ---
     // Base phase: fewer quality sessions; Specific phase: full quality load
@@ -610,7 +617,8 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
     if (profile.intensity === 'heavy') easyDaysCount = 2;
 
     const requiredRemainingDist = easyDaysCount * minEasyFloor + (profile.intensity === 'heavy' ? minRecoveryKm : 0);
-    if (remainingDist < requiredRemainingDist && weekVolume < peakMPW) {
+    // 恢复周不抬举：下限抬举会把 cutback 顶回去（诚实减量）
+    if (!isRecovery && remainingDist < requiredRemainingDist && weekVolume < peakMPW) {
       weekVolume += requiredRemainingDist - remainingDist;
       remainingDist = requiredRemainingDist;
     }
@@ -633,9 +641,10 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       let wType = 'Rest';
       let dist = 0;
 
-      // Enforce minimum easy distance
+      // Enforce minimum easy distance（恢复周例外：允许低于单次下限，让 -28% 真实落账）
       const getEasyDist = (ratio: number, days: number) => {
         let d = remainingDist * ratio;
+        if (isRecovery) return Math.max(minRecoveryKm - 1, Math.round(d));
         if (d > 0 && d < minEasyFloor) d = Math.max(d, Math.min(remainingDist / days, minEasyFloor));
         return Math.max(minEasyFloor, d);
       };
