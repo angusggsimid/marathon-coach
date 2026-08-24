@@ -1,4 +1,4 @@
-import { addDays, differenceInDays, startOfDay } from 'date-fns';
+import { addDays, differenceInDays, format, startOfDay } from 'date-fns';
 
 export type CalculationMethod = 'coros';
 
@@ -344,6 +344,26 @@ export function getProfilePlanMismatch(
     if (profile.raceType === 'half' && km > 25) return 'race-type-drift';
   }
   return null;
+}
+
+/**
+ * 校准类再生成的周期锚点解析。
+ * 原则：能力参数刷新（LT/PB/VO₂max 覆盖）不应重置周期相位——
+ * 以原计划首日为 asOf 重建完整弧线（过去=历史，未来=延续原相位、只更新剂量）。
+ * 比赛日变更 = 真新目标 → 锚点回到今天（新周期）。
+ * 回退链：无计划或异常 → 今天。
+ */
+export function resolveRegenerationAnchor(
+  profileRaceDate: string,
+  plan: DailyWorkout[],
+  today: Date = new Date(),
+): Date {
+  if (!plan.length) return localDay(today);
+  const planRace = plan.find(w => w.workoutType === 'Race');
+  const planRaceDate = planRace ? format(planRace.date, 'yyyy-MM-dd') : null;
+  if (planRaceDate && planRaceDate !== profileRaceDate) return localDay(today);
+  // 原周期起点 = 计划首日
+  return normalizeWorkoutDate(plan[0].date);
 }
 
 export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date()): DailyWorkout[] {

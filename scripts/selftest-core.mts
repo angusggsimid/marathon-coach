@@ -2389,6 +2389,39 @@ console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
   assert(repV1.patch.vdotOverride === 48, 'C1: VO₂max 覆盖建议入 patch', JSON.stringify(repV1.patch));
   const repV2 = buildCoachReport(c1Snap as never, { ...profStale, vdotOverride: 48 } as never);
   assert(repV2.patch.vdotOverride === undefined, 'C1: 已覆盖不重复触发');
+  // ── 周期锚点：校准类再生成不重置相位 ──
+  const { resolveRegenerationAnchor } = await import('../src/utils/training-engine.ts');
+  // 模拟 5 月起步的 26 周计划
+  const mayStart = new Date('2026-05-04T00:00:00');
+  const longProf = baseProfile({ raceType: 'full', raceDate: '2026-11-24', intensity: 'moderate', pbHalf: '1:42:00' });
+  const mayPlan = generateTrainingPlan(longProf, mayStart);
+  assert(mayPlan.length >= 180, '锚点: 长周期计划生成');
+  const mayPeakWk = Math.max(...Array.from({ length: Math.ceil(mayPlan.length / 7) }, (_, w) =>
+    mayPlan.slice(w * 7, (w + 1) * 7).reduce((s2, d) => s2 + (d.distanceKm ?? 0), 0)));
+  // 9 月校准：锚点应解析为原起点（5/4）而非今天
+  const anchor = resolveRegenerationAnchor('2026-11-24', mayPlan, new Date('2026-09-15T00:00:00'));
+  assert(format(anchor, 'yyyy-MM-dd') === '2026-05-04', '锚点: 校准再生成沿用原周期起点',
+    format(anchor, 'yyyy-MM-dd'));
+  const reCal = generateTrainingPlan({ ...longProf, ltPace: '4:30' }, anchor);
+  const sepWeekKm = (pl: typeof mayPlan) => {
+    // 找 9/15 所在周
+    for (let w = 0; w < Math.ceil(pl.length / 7); w++) {
+      const wk = pl.slice(w * 7, (w + 1) * 7);
+      if (wk.length && format(new Date(wk[0].date), 'yyyy-MM-dd') <= '2026-09-15' &&
+          (!wk[6] || format(new Date(wk[6].date), 'yyyy-MM-dd') >= '2026-09-15')) {
+        return wk.reduce((s2, d) => s2 + (d.distanceKm ?? 0), 0);
+      }
+    }
+    return 0;
+  };
+  const beforeCal = sepWeekKm(mayPlan);
+  const afterCal = sepWeekKm(reCal);
+  assert(afterCal >= beforeCal * 0.85, '锚点: 校准后同期跑量不塌方（保留相位）',
+    `${beforeCal}→${afterCal}`);
+  // 新比赛日 = 真新目标 → 锚回今天
+  const newGoalAnchor = resolveRegenerationAnchor('2027-03-15', mayPlan, new Date('2026-09-15T00:00:00'));
+  assert(format(newGoalAnchor, 'yyyy-MM-dd') === '2026-09-15', '锚点: 新目标重开周期');
+
   // 计划峰值命中 COROS 带：覆盖生效后 16 周全马 moderate
   const ovPlan = generateTrainingPlan({ ...baseProfile({ raceType: 'full', raceDate: raceIn3(112), intensity: 'moderate' }), pbHalf: '1:43:43', vdotOverride: 48 }, asOf16w3);
   const ovWeeks: number[] = [];

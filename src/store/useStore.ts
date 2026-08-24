@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserProfile, DailyWorkout } from '../utils/training-engine';
-import { generateTrainingPlan, timeToSeconds, resolveVDOT } from '../utils/training-engine';
+import { generateTrainingPlan, timeToSeconds, resolveVDOT, resolveRegenerationAnchor } from '../utils/training-engine';
 import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
 import type { ObjectiveAdaptation, AdaptationOverride } from '../utils/weekly-adaptation';
@@ -432,7 +432,8 @@ export const useStore = create<AppState>()(
         if (applied.length === 0) return { applied, planRegenerated: false };
 
         const profile = { ...get().profile, ...updates };
-        const plan = generateTrainingPlan(profile);
+        // 校准类再生成：沿用原周期起点（保留相位与长窗系数），不重置进度
+        const plan = generateTrainingPlan(profile, resolveRegenerationAnchor(profile.raceDate, get().plan));
         if (plan.length > 0) {
           set({ profile, plan, isPlanGenerated: true, planNeedsRegen: false, autoCheckinSuggestions: [] });
           return { applied, planRegenerated: true };
