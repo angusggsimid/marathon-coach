@@ -2301,11 +2301,17 @@ console.log('\n── 批次二：剂量体系（映射校准/35%钳制/封顶/c
   const viol35 = train.filter((w, i) => !recSet.has(i) && w.lr > Math.ceil(w.km * 0.35) + 1);
   assert(viol35.length === 0, '剂量: 非 taper/恢复周长跑 ≤35%', JSON.stringify(viol35));
 
-  // cutback：结构位深度 -20~-38%（0.72 目标 ± 组装容差）
+  // cutback：结构位深度 -30~-48%（COROS 风格深砍，Pfitzinger/Gabbett planned-overreaching）
   assert(recSet.size === 3, 'cutback: 3:1 节奏存在');
   for (const i of recSet) {
     const r = train[i].km / train[i - 1].km;
-    assert(r > 0.60 && r < 0.82, 'cutback: 深度落在 -20~-38% 带', `i=${i} ratio=${r.toFixed(2)}`);
+    assert(r > 0.50 && r < 0.72, 'cutback: 深砍落在 -28~-50% 带', `i=${i} ratio=${r.toFixed(2)}`);
+  }
+  // 高原冲击：恢复周后允许直接跳回段目标（无增幅帽）——峰值周贴合公式推导
+  const surgeIdx = [...recSet].map(i => i + 1).filter(i => i < train.length);
+  for (const i of surgeIdx) {
+    assert(train[i].km > train[i - 1].km * 1.30, '高原: 恢复后冲击跳升 >+30%',
+      `W${i}: ${train[i - 1].km}→${train[i].km}`);
   }
 
   // plateau 可达性：最后 4 个训练周内出现 ≥92% 峰值
@@ -2338,7 +2344,7 @@ console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
   };
   const c1Snap = {
     version: 1, source: 'x', builtAt: '2026-08-20T00:00:00Z', device: '',
-    fitness: { ltPaceSec: 278, predictions: { half: '1:43:43', full: '3:37:47' } },
+    fitness: { vo2max: 48, ltPaceSec: 278, predictions: { half: '1:43:43', full: '3:37:47' } },
     activities: [], dailyMetrics: [],
   };
   const c1Rep = buildCoachReport(c1Snap as never, c1Prof as never);
@@ -2370,6 +2376,27 @@ console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
   // 基础期无 MP 块
   const baseLSD = c7Plan.filter(w => w.workoutType === 'LSD' && c7DTR(w) < -84);
   assert(baseLSD.every(w => (w.details?.main?.length ?? 0) <= 1), 'C7: 基础期无 MP 块');
+
+  // ── C1 核心：设备实测 VO₂max 覆盖（绕开换算口径差）──
+  const { resolveVDOT } = await import('../src/utils/training-engine.ts');
+  const profStale = { ...c1Prof, pbHalf: '1:43:43' }; // Daniels 换算仅 ~43.4
+  assert(resolveVDOT(profStale as never) < 45, '覆盖: 换算值低估（<45）',
+    String(resolveVDOT(profStale as never)));
+  assert(Math.abs(resolveVDOT({ ...profStale, vdotOverride: 48 } as never) - 48) < 0.01,
+    '覆盖: 设备实测优先于换算');
+  // 建议：vo2max 48 vs 换算 43.4 → 差 ≥1.5 触发；已覆盖则不重复触发
+  const repV1 = buildCoachReport(c1Snap as never, profStale as never);
+  assert(repV1.patch.vdotOverride === 48, 'C1: VO₂max 覆盖建议入 patch', JSON.stringify(repV1.patch));
+  const repV2 = buildCoachReport(c1Snap as never, { ...profStale, vdotOverride: 48 } as never);
+  assert(repV2.patch.vdotOverride === undefined, 'C1: 已覆盖不重复触发');
+  // 计划峰值命中 COROS 带：覆盖生效后 16 周全马 moderate
+  const ovPlan = generateTrainingPlan({ ...baseProfile({ raceType: 'full', raceDate: raceIn3(112), intensity: 'moderate' }), pbHalf: '1:43:43', vdotOverride: 48 }, asOf16w3);
+  const ovWeeks: number[] = [];
+  for (let w = 0; w < Math.ceil(ovPlan.length / 7); w++) {
+    ovWeeks.push(Math.round(ovPlan.slice(w * 7, (w + 1) * 7).reduce((s2, d) => s2 + (d.distanceKm ?? 0), 0)));
+  }
+  const ovPeak = Math.max(...ovWeeks.slice(0, ovWeeks.length - 3));
+  assert(ovPeak >= 68 && ovPeak <= 78, 'C1终局: VO₂max 覆盖后峰值命中 COROS 带 68-78', `peak=${ovPeak}`);
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

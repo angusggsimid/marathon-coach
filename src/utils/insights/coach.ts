@@ -11,6 +11,7 @@ import { calculateVDOTFromHalf, calculateVDOTFromFull } from '../training-engine
 // ─── 引擎档案（主 App UserProfile 的白名单子集，与 backup.ts PROFILE_KEYS 对齐）───
 
 export interface EngineProfile {
+  vdotOverride?: number;
   height: number | '';
   weight: number | '';
   pb5k: string;
@@ -29,7 +30,7 @@ export interface EngineProfile {
 export type Confidence = 'high' | 'medium' | 'low';
 
 export interface Recommendation {
-  id: 'lt-pace' | 'lthr' | 'adaptation' | 'intensity' | 'pb-reference' | 'pb-refresh' | 'goal-feasibility';
+  id: 'lt-pace' | 'lthr' | 'adaptation' | 'intensity' | 'pb-reference' | 'pb-refresh' | 'vdot-override' | 'goal-feasibility';
   title: string;
   target?: string;
   currentValue?: string;
@@ -58,6 +59,8 @@ export interface CoachPatch {
   /** 手表实测能力刷新（只升不降；语义=当前能力锚，非历史成绩） */
   pbHalf?: string;
   pbFull?: string;
+  /** 设备实测 VO₂max 直接覆盖引擎换算（绕开 Daniels↔EvoLab 口径差） */
+  vdotOverride?: number;
 }
 
 export interface CoachReport {
@@ -332,6 +335,37 @@ function intensityRecommendation(snapshot: CorosSnapshot, profile: EngineProfile
   };
 }
 
+/** C1 核心：设备实测 VO₂max → 引擎输入覆盖（绕开换算口径差；只升不降） */
+function vdotOverrideRecommendation(snapshot: CorosSnapshot, profile: EngineProfile | null): Recommendation | null {
+  const vo2 = snapshot.fitness?.vo2max;
+  if (!vo2 || vo2 < 30 || vo2 > 90) return null;
+  const curDerived = profile ? (() => {
+    const full = timeToSeconds(profile.pbFull);
+    if (full > 0) return calculateVDOTFromFull(profile.pbFull);
+    const half = timeToSeconds(profile.pbHalf);
+    if (half > 0) return calculateVDOTFromHalf(profile.pbHalf);
+    const t5 = timeToSeconds(profile.pb5k), t10 = timeToSeconds(profile.pb10k);
+    return t5 > 0 || t10 > 0 ? calculateVDOTFrom5K10K(t5, t10) : 0;
+  })() : 0;
+  const curOverride = profile?.vdotOverride ?? 0;
+  const effectiveNow = Math.max(curDerived, curOverride);
+  if (vo2 - effectiveNow < 1.5) return null; // 差距 ≥1.5 VDOT 才动
+  return {
+    id: 'vdot-override',
+    title: 'VO₂max 引擎覆盖',
+    target: 'profile.vdotOverride',
+    currentValue: `换算 ${effectiveNow.toFixed(1)}${curOverride ? ` / 覆盖 ${curOverride}` : ''}`,
+    recommendedValue: vo2,
+    confidence: 'high',
+    autoPatch: true,
+    evidence: [
+      `COROS 设备实测 VO₂max ${vo2}，高于引擎换算值 ${(vo2 - effectiveNow).toFixed(1)} 点`,
+      'Daniels 换算与 COROS EvoLab 存在系统性口径差——设备实测直接作为引擎输入，绕开换算',
+    ],
+    engineEffect: '跑量容量与全部配速按实测 VO₂max 重算',
+  };
+}
+
 function pbRecommendations(snapshot: CorosSnapshot, profile: EngineProfile | null): Recommendation[] {
   const preds = snapshot.fitness?.predictions;
   if (!preds || !profile) return [];
@@ -457,6 +491,8 @@ export function buildCoachReport(snapshot: CorosSnapshot, profile: EngineProfile
   if (ltRec) recommendations.push(ltRec);
   const lthrRec = lthrRecommendation(snapshot, profile);
   if (lthrRec) recommendations.push(lthrRec);
+  const vdRec = vdotOverrideRecommendation(snapshot, profile);
+  if (vdRec) recommendations.push(vdRec);
   recommendations.push(...pbRecommendations(snapshot, profile));
   const intensityRec = intensityRecommendation(snapshot, profile);
   if (intensityRec) recommendations.push(intensityRec);
@@ -468,6 +504,7 @@ export function buildCoachReport(snapshot: CorosSnapshot, profile: EngineProfile
     if (!r.autoPatch || !r.recommendedValue) continue;
     if (r.id === 'lt-pace') patch.ltPace = r.recommendedValue;
     if (r.id === 'lthr') patch.lthr = Number(r.recommendedValue);
+    if (r.id === 'vdot-override') patch.vdotOverride = Number(r.recommendedValue);
     if (r.id === 'pb-refresh') {
       if (r.target === 'profile.pbHalf') patch.pbHalf = r.recommendedValue;
       if (r.target === 'profile.pbFull') patch.pbFull = r.recommendedValue;
@@ -566,5 +603,6 @@ export function buildCalibratedBackup(backup: Record<string, unknown>, patch: Co
   if (patch.lthr !== undefined) profile.lthr = patch.lthr;
   if (patch.pbHalf !== undefined) profile.pbHalf = patch.pbHalf;
   if (patch.pbFull !== undefined) profile.pbFull = patch.pbFull;
+  if (patch.vdotOverride !== undefined) profile.vdotOverride = patch.vdotOverride;
   return JSON.stringify(next, null, 2);
 }

@@ -125,6 +125,7 @@ const DATA_KEYS = new Set([...BACKUP_DATA_KEYS, 'activeTab']);
 const PROFILE_KEYS = new Set([
   'height', 'weight', 'pb5k', 'pb10k', 'pbHalf', 'pbFull',
   'lthr', 'ltPace', 'raceDate', 'raceType', 'goalTime', 'intensity', 'longRunDay',
+  'vdotOverride',
 ]);
 const WORKOUT_KEYS = new Set([
   'date', 'workoutType', 'description', 'targetPace', 'targetHR',
@@ -268,11 +269,13 @@ function parseProfile(raw: unknown): UserProfile | null {
   const height = raw.height;
   const weight = raw.weight;
   const lthr = raw.lthr;
+  const vdotOverride = raw.vdotOverride;
   const longRunDay = raw.longRunDay;
   if (
     !(height === '' || finiteNum(height, 0, 300)) ||
     !(weight === '' || finiteNum(weight, 0, 500)) ||
     !(lthr === '' || finiteNum(lthr, 0, 250)) ||
+    !(vdotOverride === undefined || finiteNum(vdotOverride, 30, 90)) ||
     typeof longRunDay !== 'number' ||
     !Number.isInteger(longRunDay) ||
     longRunDay < 0 ||
@@ -296,6 +299,7 @@ function parseProfile(raw: unknown): UserProfile | null {
     pbHalf: raw.pbHalf as string,
     pbFull: raw.pbFull as string,
     lthr: lthr as number | '',
+    vdotOverride: vdotOverride === undefined ? undefined : (vdotOverride as number),
     ltPace: raw.ltPace as string,
     raceDate: raw.raceDate as string,
     raceType: raw.raceType as 'half' | 'full',

@@ -411,6 +411,15 @@ export const useStore = create<AppState>()(
           updates.lthr = patch.lthr;
           applied.push(`乳酸阈心率 → ${patch.lthr} bpm`);
         }
+        // C1 核心：设备实测 VO₂max 覆盖（只升不降 vs 当前生效值）
+        if (patch.vdotOverride !== undefined && Number.isFinite(patch.vdotOverride)
+            && patch.vdotOverride >= 30 && patch.vdotOverride <= 90) {
+          const curEffective = resolveVDOT(get().profile);
+          if (patch.vdotOverride > curEffective) {
+            updates.vdotOverride = patch.vdotOverride;
+            applied.push(`VO₂max 引擎覆盖 → ${patch.vdotOverride}（设备实测优先于换算）`);
+          }
+        }
         // C1：PB 能力锚自动刷新（只升不降；空值填充）
         for (const [key, label] of [['pbHalf', '半马'], ['pbFull', '全马']] as const) {
           const v = patch[key];

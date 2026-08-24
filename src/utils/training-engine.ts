@@ -45,6 +45,9 @@ export interface UserProfile {
   goalTime: string; // 'hh:mm:ss'
   intensity: 'light' | 'moderate' | 'heavy';
   longRunDay: number; // 0=Sunday, 1=Monday, ..., 6=Saturday (default 0)
+  /** 设备实测 VO₂max 覆盖（COROS EvoLab；P0 校准写入，只升不降）。
+   *  与 Daniels 换算存在系统性口径差（同成绩 COROS 高 ~4 点），设备实测优先。 */
+  vdotOverride?: number;
 }
 
 export interface WorkoutSegment {
@@ -171,9 +174,15 @@ export function hasUsablePerformance(profile: UserProfile): boolean {
  * 计算 VDOT：Full > Half > 5K/10K。无有效成绩返回 0（不 fallback）。
  */
 export function resolveVDOT(profile: UserProfile): number {
-  if (timeToSeconds(profile.pbFull) > 0) return calculateVDOTFromFull(profile.pbFull);
-  if (timeToSeconds(profile.pbHalf) > 0) return calculateVDOTFromHalf(profile.pbHalf);
-  return calculateVDOTFrom5K10K(profile.pb5k, profile.pb10k);
+  // 设备实测覆盖优先（只升不降）：COROS EvoLab 与 Daniels 换算存在 ~4 点口径差，
+  // 实测值代表当前生理现实，高于换算值时以实测为准
+  const ov = profile.vdotOverride;
+  const derived =
+    timeToSeconds(profile.pbFull) > 0 ? calculateVDOTFromFull(profile.pbFull)
+    : timeToSeconds(profile.pbHalf) > 0 ? calculateVDOTFromHalf(profile.pbHalf)
+    : calculateVDOTFrom5K10K(profile.pb5k, profile.pb10k);
+  if (ov != null && Number.isFinite(ov) && ov >= 30 && ov <= 90 && ov > derived) return ov;
+  return derived;
 }
 
 /** 计划生成前置检查；返回 null 表示可通过。 */
@@ -428,7 +437,11 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
   //    Taper: 3 weeks exponential decay (Bosquet meta-analysis)
   const targetVolumes: number[] = [];
   const cycleLength = 4; // universal 3:1 (3 build + 1 recovery)
-  const recoveryDepth = 0.72; // -28%，落在文献带 -25~-30%（3:1 build-recovery 标准）
+  // COROS 风格 planned-overreaching：深砍（-38%）排空疲劳 → 恢复周后直接跳回段目标
+  // （Pfitzinger/Gabbett 块式震荡；10% 规则只约束连续建设，不约束计划性震荡）
+  const recoveryDepth = profile.raceType === 'full'
+    ? (profile.intensity === 'light' ? 0.66 : 0.58)
+    : 0.65;
 
   // Half marathon taper = 2 weeks (Pfitzinger/Daniels); full = 3 weeks
   const taperWeeksForRace = profile.raceType === 'half' ? 2 : 3;
@@ -483,14 +496,20 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
         targetVolume = peakMPW;
       }
 
-      // 增幅上限：连续建设周 +9%；恢复周后的追赶周 +15%（保证 plateau 数学可达）
+      // 增幅上限：仅约束连续建设周（+9%）；
+      // 恢复周后的冲击周不受帽约束——段目标本身定义反弹幅度（COROS 式猛高原）
       if (w > 0) {
         const prevWasRecovery = w >= 2 && targetVolumes[w - 1] < targetVolumes[w - 2] * 0.90;
-        const prevNonRecovery = prevWasRecovery ? targetVolumes[w - 2] : targetVolumes[w - 1];
-        targetVolume = Math.min(targetVolume, prevNonRecovery * (prevWasRecovery ? 1.15 : 1.09));
+        if (!prevWasRecovery) {
+          targetVolume = Math.min(targetVolume, targetVolumes[w - 1] * 1.09);
+        }
       }
     }
     targetVolumes.push(Math.round(targetVolume));
+    if (typeof process !== 'undefined' && process.env.DEBUG_VOL) {
+      const tag = w >= preTaperWeeks ? 'TAPER' : (w > 0 && w % cycleLength === cycleLength - 1 ? 'REC' : 'BUILD');
+      console.error(`[vol] w=${String(w).padStart(2)} tag=${tag.padStart(5)} v=${String(targetVolumes[w]).padStart(3)} peak=${peakMPW} start=${startMPW} baseEnd=${baseEndWeek} buildEnd=${buildEndWeek} preTaper=${preTaperWeeks}`);
+    }
   }
 
   // Phase tip messages by training period
@@ -559,14 +578,13 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
     lsdDistance = Math.round(Math.min(lsdDistance, timeCapKm));
 
     let weekVolume: number;
-    if (isTaperWeek || isRecovery) {
-      // 减量/恢复周：LSD 合理占据削减周量的更大份额（Pfitzinger 减量设计 60-70%），
+    if (isTaperWeek) {
+      // 减量周：LSD 合理占据削减周量的更大份额（Pfitzinger 减量设计 60-70%），
       // 普通占比帽会使周量被顶到减量目标之上——保留抬举机制
       const minWeekVolumeForLSD = Math.ceil(lsdDistance / 0.65);
       weekVolume = Math.max(baseWeekVolume, minWeekVolumeForLSD);
     } else {
-      // 普通周严格 35% 钳制（Daniels 25-30% 带的工程上界）：钳长跑、不抬周量——
-      // 尾巴不再摇狗（旧机制曾把公式目标 48km 抬成 64km 假峰）
+      // 恢复周与普通周同样执行严格 35% 钳制——cutback 必须真实落账
       weekVolume = baseWeekVolume;
       lsdDistance = Math.min(lsdDistance, Math.round(baseWeekVolume * 0.35));
     }
