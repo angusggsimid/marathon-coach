@@ -29,7 +29,7 @@ _A marathon-prep PWA for Chinese runners: fill in your results and target race, 
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # 生产构建
-npm run test:core # 引擎与算法自测（307 用例）
+npm run test:core # 引擎与算法自测（504 用例，含 18 组合矩阵回归）
 ```
 
 > 开发环境会自动复用本机 OpenCode 的 COROS 授权（`/__dev/coros-auth`），免反复登录；生产环境走标准 OAuth。
@@ -54,7 +54,7 @@ React 19 · Vite 7 · TypeScript · Tailwind CSS v4 · Zustand · ECharts · dat
 - `src/` — 主应用（档案/指标/训练/赛事/洞察 五 Tab）
 - `crawler/` — 赛事数据爬虫（zuicool / nowrun / chinarun / marathonbm）
 - `scripts/` — 自测与数据脚本
-- `docs` — 架构决策记录（ADR）、任务规划（TRAINING_LOOP）等
+- `CHANGELOG.md` — 更新日志 · `SECURITY.md` — 安全策略 · `DEPLOY.md` — 部署手册
 
 ## 📜 License
 

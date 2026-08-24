@@ -65,7 +65,3 @@ scripts/selftest-core.mts    # 引擎/算法/接口自测（372 用例）
 - `CHANGELOG.md` — 更新日志（面向用户的可感知变化，倒序）
 - `DEPLOY.md` — 部署手册
 - `AGENTS.md` — 项目规则（本仓库工作方式）
-- `ADR_PWA_MCP_ARCHITECTURE_2026-08-15.md` — PWA 形态与 MCP 架构决策
-- `TRAINING_LOOP_MASTER_PLAN_2026-08-16.md` — 三时程控制模型与路线图
-- `TASK2_INTEGRATION_DESIGN_2026-08-16.md` — 洞察合并设计
-- `PROJECT_REVIEW_PLAN_2026-08-20.md` — 复查规划与执行记录

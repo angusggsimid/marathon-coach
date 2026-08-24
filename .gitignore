@@ -65,3 +65,12 @@ local-data/
 
 # 本地项目日志（含个人训练数据，不公开）
 CONTEXT.md
+
+# OpenCode 本地工件（agent 指令/依赖不公开）
+.opencode/
+
+# 内部文档与验收归档（本地保留，永不公开）
+local-data/archive/
+
+# 周健康检查脚本（launchd 依赖本机路径；含用户名不公开）
+scripts/weekly-health-check.sh

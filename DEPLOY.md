@@ -107,7 +107,7 @@ Vercel 检测到 push 会自动重新部署，约 1 分钟后生效。
 
 ## 第二部分 B：EdgeOne Makers（腾讯云）
 
-> 当前状态：已完成。项目已关联 GitHub 仓库 `angusggsimid/marathon` 的 `main` 分支，每次 push 自动构建部署，与 Vercel 并行。
+> 当前状态：已完成。项目已关联 GitHub 仓库 `angusggsimid/marathon-coach` 的 `main` 分支，每次 push 自动构建部署，与 Vercel 并行。
 
 - 生产地址：`https://marathon-gzgm45fm.edgeone.cool`
 - 项目 ID：`makers-tpxcnymmrsth`（本地 `.edgeone/project.json` 已关联）
