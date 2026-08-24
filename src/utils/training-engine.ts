@@ -314,6 +314,28 @@ export function calculateHRZones(profile: UserProfile) {
   };
 }
 
+/**
+ * 档案 ↔ 计划一致性守卫：检测档案漂移（比赛日已过、计划止期漂移、项目不符）。
+ * 纯函数；UI 层据此提示重新生成。空计划不报（无计划无漂移可言）。
+ */
+export function getProfilePlanMismatch(
+  profile: UserProfile,
+  plan: DailyWorkout[],
+): 'raceDate-past' | 'plan-stale' | 'race-type-drift' | null {
+  if (!plan.length) return null;
+  const today = localDay();
+  if (parseLocalDate(profile.raceDate) < today) return 'raceDate-past';
+  const planEnd = plan[plan.length - 1].date;
+  if (Math.abs(differenceInDays(parseLocalDate(profile.raceDate), planEnd)) > 1) return 'plan-stale';
+  const raceW = plan.find(w => w.workoutType === 'Race');
+  if (raceW) {
+    const km = raceW.distanceKm ?? 0;
+    if (profile.raceType === 'full' && km > 0 && km < 40) return 'race-type-drift';
+    if (profile.raceType === 'half' && km > 25) return 'race-type-drift';
+  }
+  return null;
+}
+
 export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date()): DailyWorkout[] {
   const plan: DailyWorkout[] = [];
   const today = localDay(asOf);
@@ -325,7 +347,8 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
   const totalDays = differenceInDays(raceDate, today);
   if (totalDays <= 0) return [];
 
-  const totalWeeks = Math.max(1, Math.ceil(totalDays / 7));
+  // 含比赛日在内的总天数（totalDays 是比赛当天）——否则整周余数恰为 0 时赛日会被截断
+  const totalWeeks = Math.max(1, Math.ceil((totalDays + 1) / 7));
   const paces = calculatePaces(profile);
   if (!paces) return []; // 空成绩不得用 4:33 生成真实计划
   const hrZones = calculateHRZones(profile);
@@ -512,11 +535,12 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
     let lsdDistance = startLSD + (PEAK_LSD - startLSD) * Math.pow(progress, 0.8);
     lsdDistance = Math.min(lsdDistance, PEAK_LSD);
 
+    // 减量区起始：距赛 taperWeeksForRace×7 天（全马 21 / 半马 14）
+    const taperZoneDTR = taperWeeksForRace * 7;
     if (isTaperWeek) {
+      // Pfitzinger taper 长跑序列——此为周级【预估值】，仅供体积下限估算；
+      // 实际课表距离由日循环按 dTR 精确映射（免疫周边界错位）
       const taperIdx = w - preTaperWeeks;
-      // Pfitzinger taper long runs:
-      //   Full:  22km → 14km → 8km  (3-week taper)
-      //   Half:  16km → 10km        (2-week taper — Pfitzinger 12-week half plan)
       if (profile.raceType === 'full') {
         if (taperIdx === 0) lsdDistance = Math.max(minLSDKm, 22);
         else if (taperIdx === 1) lsdDistance = Math.max(minLSDKm, 14);
@@ -598,6 +622,9 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       const currentDate = addDays(today, dayIndex);
       currentDate.setHours(12, 0, 0, 0);
       const isRaceDay = dayIndex === totalDays;
+      const dTR = totalDays - dayIndex; // 距比赛日天数（0 = 比赛当天）
+      // 赛前红线：最后 7 天零质量课（含赛日）
+      const effSessions = dTR <= 7 ? 0 : intensitySessions;
       const dow = currentDate.getDay(); // 0=Sunday
 
       // Relative day offsets from lsdDay, with configurable long run day
@@ -616,8 +643,8 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       if (profile.intensity === 'light') {
         // 4 days: LSD(+0), Intensity(+2), Easy(+4), Easy(+6)
         if (dow === rel(0)) { wType = 'LSD'; dist = lsdDistance; }
-        else if (dow === rel(2) && intensitySessions > 0) { wType = 'Intensity'; dist = intensityA_km; }
-        else if (dow === rel(2) && intensitySessions === 0) { wType = 'Easy'; dist = getEasyDist(0.4, 3); }
+        else if (dow === rel(2) && effSessions > 0) { wType = 'Intensity'; dist = intensityA_km; }
+        else if (dow === rel(2) && effSessions === 0) { wType = 'Easy'; dist = getEasyDist(0.4, 3); }
         else if (dow === rel(4)) { wType = 'Easy'; dist = getEasyDist(0.3, 3); }
         else if (dow === rel(6)) { wType = 'Easy'; dist = getEasyDist(0.3, 3); }
       } else if (profile.intensity === 'moderate') {
@@ -626,10 +653,10 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
         //   IntensityB at rel(5) — never rel(6) — ensures 2 easy days before next LSD
         //   Pfitzinger principle: long run legs must be fresh (≥2 days from last hard session)
         if (dow === rel(0)) { wType = 'LSD'; dist = lsdDistance; }
-        else if (dow === rel(3) && intensitySessions > 0) { wType = 'Intensity';  dist = intensityA_km; }
-        else if (dow === rel(5) && intensitySessions > 1) { wType = 'Intensity2'; dist = intensityB_km; }
-        else if (dow === rel(2)) { wType = 'Easy'; dist = getEasyDist(0.40, intensitySessions > 1 ? 3 : 3); }
-        else if (dow === rel(4)) { wType = 'Easy'; dist = getEasyDist(0.35, intensitySessions > 1 ? 3 : 3); }
+        else if (dow === rel(3) && effSessions > 0) { wType = 'Intensity';  dist = intensityA_km; }
+        else if (dow === rel(5) && effSessions > 1) { wType = 'Intensity2'; dist = intensityB_km; }
+        else if (dow === rel(2)) { wType = 'Easy'; dist = getEasyDist(0.40, effSessions > 1 ? 3 : 3); }
+        else if (dow === rel(4)) { wType = 'Easy'; dist = getEasyDist(0.35, effSessions > 1 ? 3 : 3); }
         else if (dow === rel(6)) { wType = 'Easy'; dist = getEasyDist(0.25, 3); }
       } else {
         // Heavy: 6 days: LSD(+0), Easy(+2), IntensityA(+3), Recovery(+4), IntensityB(+5), Easy(+6)
@@ -637,12 +664,12 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
         const easyDist = Math.max(0, remainingDist - recDist);
         if (dow === rel(0)) { wType = 'LSD'; dist = lsdDistance; }
         else if (dow === rel(2)) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.45); }
-        else if (dow === rel(3) && intensitySessions > 0) { wType = 'Intensity'; dist = intensityA_km; }
+        else if (dow === rel(3) && effSessions > 0) { wType = 'Intensity'; dist = intensityA_km; }
         else if (dow === rel(4)) { wType = 'Recovery'; dist = recDist; }
-        else if (dow === rel(5) && intensitySessions > 1) { wType = 'Intensity2'; dist = intensityB_km; }
-        else if (dow === rel(5) && intensitySessions <= 1) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.3); }
+        else if (dow === rel(5) && effSessions > 1) { wType = 'Intensity2'; dist = intensityB_km; }
+        else if (dow === rel(5) && effSessions <= 1) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.3); }
         else if (dow === rel(6)) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.55); }
-        else if (dow === rel(3) && intensitySessions === 0) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.3); }
+        else if (dow === rel(3) && effSessions === 0) { wType = 'Easy'; dist = Math.max(minEasyFloor, easyDist * 0.3); }
       }
 
       const easyCap = profile.raceType === 'full' ? 16 : 14;
@@ -655,9 +682,10 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       // A = primary (longer), B = secondary (shorter, different system)
       let poolA: string[];
       let poolB: string[];
-      if (isTaperWeek) {
-        poolA = ['TempoIntervals', 'MP'];
-        poolB = ['TempoIntervals'];
+      if (isTaperWeek || dTR < taperZoneDTR) {
+        // 减量期质量课仅保留 MP 专项（比赛配速），禁 Z4 以上刺激
+        poolA = ['MP'];
+        poolB = ['MP'];
       } else if (phase === '基础/建构期') {
         poolA = ['Fartlek', 'TempoIntervals', 'Cruise'];
         poolB = ['Fartlek', 'TempoIntervals'];
@@ -668,6 +696,25 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       }
 
       let finalType = wType;
+      // 减量区后段（赛前 ≤14 天）：MP 专项课缩至 60%，保刺激清疲劳
+      if (finalType !== 'Race' && dTR >= 8 && dTR <= 14 && wType !== 'LSD') {
+        dist = Math.round(dist * 0.6 * 10) / 10;
+      }
+      // 减量区长跑按距赛天数精确映射（覆盖周级预估，免疫周边界错位）：
+      //   Full: dTR 15-21→22 · 8-14→14 · ≤7 shakeout化(≤8km Easy)
+      //   Half: dTR 10-16→16 · ≤9→10
+      if (!isRaceDay && finalType === 'LSD' && isTaperWeek) {
+        if (profile.raceType === 'full') {
+          dist = dTR >= 15 ? 22 : dTR >= 8 ? 14 : Math.min(dist, 8);
+        } else {
+          dist = dTR >= 10 ? 16 : Math.min(dist, 10);
+        }
+      }
+      // 赛周（最后 6 天）：残余 LSD 降级为轻松跑并封顶 8km（shakeout 化）
+      if (!isRaceDay && dTR <= 6 && finalType === 'LSD') {
+        finalType = 'Easy';
+        dist = Math.min(dist, 8);
+      }
       const typeA = poolA[(w * 3 + 1) % poolA.length];
       const typeB = poolB[(w * 5 + 2) % poolB.length];
       // Guarantee A ≠ B

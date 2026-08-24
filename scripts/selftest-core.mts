@@ -101,6 +101,7 @@ import {
 import { countStreak } from '../src/utils/checkin-streak.ts';
 import { computeACWR } from '../src/utils/acwr.ts';
 import { getSuppressedRaces } from '../src/utils/race-plan-overlay.ts';
+import { getProfilePlanMismatch } from '../src/utils/training-engine.ts';
 import { teStats, judgeTeQuality } from '../src/utils/te-quality.ts';
 import { heatAdjustment } from '../src/utils/heat-adjust.ts';
 import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
@@ -2184,6 +2185,68 @@ console.log('\n── 科普层内容完整性 ──');
     }
   }
   assert(bad === '', '科普: 所有主题六段式完整', bad);
+}
+
+console.log('\n── 批次一：taper 红线 + 档案一致性守卫 ──');
+{
+  const Z4 = new Set(['Tempo', 'TempoIntervals', 'Interval', 'Cruise', 'Fartlek', 'Progression', 'Hills']);
+  const asOf16w = new Date();
+  const raceIn = (days: number) => format(addDays(asOf16w, days), 'yyyy-MM-dd');
+
+  // ── C3：全马 taper 红线（moderate）──
+  const fp = baseProfile({ raceType: 'full', raceDate: raceIn(112), intensity: 'moderate' });
+  const fPlan = generateTrainingPlan(fp, asOf16w);
+  assert(fPlan.length > 0, 'taper: 全马计划生成');
+  const raceIdx = fPlan.findIndex(w => w.workoutType === 'Race');
+  assert(raceIdx > 0 && Math.round(fPlan[raceIdx].distanceKm ?? 0) === 42, 'taper: Race 日 42km');
+
+  const daysToRace = (w: typeof fPlan[number]) =>
+    Math.round((new Date(w.date).getTime() - new Date(fPlan[raceIdx].date).getTime()) / 86400000);
+  const final10 = fPlan.filter(w => { const d = daysToRace(w); return d >= -10 && d < 0; });
+  assert(final10.every(w => !Z4.has(w.workoutType)), 'taper: 赛前 10 天无 Z4 课型',
+    JSON.stringify(final10.filter(w => Z4.has(w.workoutType))));
+  const raceWeek = fPlan.filter(w => { const d = daysToRace(w); return d >= -7 && d < 0; });
+  assert(raceWeek.length > 0 && raceWeek.every(w => ['Easy', 'Rest', 'Recovery'].includes(w.workoutType)),
+    'taper: 赛周仅轻松/休息/恢复', JSON.stringify(raceWeek.map(w => `${format(new Date(w.date),'MM-dd')} ${w.workoutType}`)));
+
+  // taper 前两/三周保留 MP 专项且递减（仅统计减量区内：距赛 8-21 天）
+  const mpSessions = fPlan.filter(w => w.workoutType === 'MP' && daysToRace(w) <= -8 && daysToRace(w) >= -21);
+  assert(mpSessions.length >= 1, 'taper: 存在 MP 专项课');
+  const sortedMp = mpSessions.sort((a, b) => daysToRace(a) - daysToRace(b));
+  if (sortedMp.length >= 2) {
+    assert(sortedMp[1].distanceKm! < sortedMp[0].distanceKm!, 'taper: MP 课随比赛临近递减');
+  }
+
+  // half 映射同规则
+  const hp = baseProfile({ raceType: 'half', raceDate: raceIn(112), intensity: 'moderate' });
+  const hPlan = generateTrainingPlan(hp, asOf16w);
+  const hRaceIdx = hPlan.findIndex(w => w.workoutType === 'Race');
+  const hDays = (w: typeof hPlan[number]) => Math.round((new Date(w.date).getTime() - new Date(hPlan[hRaceIdx].date).getTime()) / 86400000);
+  assert(hPlan.filter(w => { const d = hDays(w); return d >= -7 && d < 0; })
+    .every(w => ['Easy', 'Rest', 'Recovery'].includes(w.workoutType)), 'taper: 半马赛周零强度');
+  assert(hPlan[hRaceIdx] && Math.round(hPlan[hRaceIdx].distanceKm ?? 0) === 21, 'taper: 半马 Race 21.1km 不受影响');
+
+  // light 全马：taper 全程零强度（原有行为保持）
+  const lp = baseProfile({ raceType: 'full', raceDate: raceIn(112), intensity: 'light' });
+  const lPlan = generateTrainingPlan(lp, asOf16w);
+  const lRaceIdx = lPlan.findIndex(w => w.workoutType === 'Race');
+  const lTaper = lPlan.filter((w, i) => i > lRaceIdx - 21 && i < lRaceIdx);
+  assert(lTaper.every(w => !Z4.has(w.workoutType)), 'taper: light 全程无 Z4');
+
+  // ── C8：档案一致性守卫 ──
+  // 干净态
+  assert(getProfilePlanMismatch(fp, fPlan) === null, '守卫: 一致档案返回 null');
+  // 比赛日已过去
+  const pastProf = baseProfile({ raceType: 'full', raceDate: format(addDays(new Date(), -30), 'yyyy-MM-dd') });
+  assert(getProfilePlanMismatch(pastProf, fPlan) === 'raceDate-past', '守卫: 比赛日已过检测');
+  // 计划止期与档案漂移
+  const staleProf = baseProfile({ ...fp, raceDate: raceIn(126) });
+  assert(getProfilePlanMismatch(staleProf, fPlan) === 'plan-stale', '守卫: 计划止期漂移检测');
+  // 项目漂移（full 档案配半马 Race）
+  const driftedPlan = fPlan.map((w, i) => i === raceIdx ? { ...w, distanceKm: 21.1 } : w);
+  assert(getProfilePlanMismatch(fp, driftedPlan) === 'race-type-drift', '守卫: 项目漂移检测');
+  // 空计划不误报
+  assert(getProfilePlanMismatch(fp, []) === null, '守卫: 空计划不报');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

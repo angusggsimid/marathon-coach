@@ -6,6 +6,7 @@ import type { RPELevel, CompletionStatus } from '../store/useStore';
 import { getCheckInMessage } from '../utils/checkin-messages';
 import { countStreak } from '../utils/checkin-streak';
 import { computeACWR } from '../utils/acwr';
+import { getProfilePlanMismatch } from '../utils/training-engine';
 import WeatherHintCard from './WeatherHintCard';
 import ScienceNote from './ScienceNote';
 import type { CheckInMessage } from '../utils/checkin-messages';
@@ -141,6 +142,7 @@ export function CalendarView() {
     profile, completions, logCompletion, getWeeklyAdaptation,
     vacations, addVacation, removeVacation, myRaces,
     exportSync, markExportSuccess, setAdaptationOverride, setSessionOverride,
+    setActiveTab,
   } = useStore();
   const basePlan = useBasePlan();
   const plan = useEffectivePlan();
@@ -189,6 +191,16 @@ export function CalendarView() {
   const staleFit = isFitChannelStale(exportSync?.fit, plan);
   const staleIcs = isChannelStale(exportSync?.ics, currentPlanFp);
   const hasAnyStale = staleFit || staleIcs;
+  // 档案 ↔ 计划一致性守卫（批次一 C8）
+  const planMismatch = useMemo(
+    () => getProfilePlanMismatch(profile, plan),
+    [profile, plan],
+  );
+  const mismatchMessage: Record<string, string> = {
+    'raceDate-past': '档案里的比赛日期已经过去',
+    'plan-stale': '当前计划的目标日期与档案不一致',
+    'race-type-drift': '计划的比赛项目与档案不一致',
+  };
 
   const handleFitExport = (range: FitExportRange) => {
     setExportError(null);
@@ -1205,6 +1217,28 @@ export function CalendarView() {
               </div>
             )}
           </div>
+
+          {/* C8. 档案 ↔ 计划一致性守卫 */}
+          {planMismatch && (
+            <div
+              className="rounded-2xl px-3 py-2.5 border border-[var(--color-red)]/25 bg-[var(--color-red)]/10 min-w-0"
+              role="alert"
+            >
+              <p className="text-[12px] font-semibold text-[var(--color-red)] leading-relaxed break-words">
+                档案与当前计划不一致：{mismatchMessage[planMismatch]}
+              </p>
+              <p className="mt-1 text-[11px] text-[var(--color-label-3)] leading-relaxed">
+                你可能正在按一份过时或错位的计划训练。请核对档案信息后重新生成计划。
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                className="mt-1.5 text-[11px] font-semibold text-[var(--color-accent)] underline underline-offset-2"
+              >
+                去档案页检查并重新生成
+              </button>
+            </div>
+          )}
 
           {/* D. 计划版本过期提醒：非阻塞、分渠道 */}
           {hasAnyStale && (
