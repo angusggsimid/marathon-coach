@@ -506,10 +506,6 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       }
     }
     targetVolumes.push(Math.round(targetVolume));
-    if (typeof process !== 'undefined' && process.env.DEBUG_VOL) {
-      const tag = w >= preTaperWeeks ? 'TAPER' : (w > 0 && w % cycleLength === cycleLength - 1 ? 'REC' : 'BUILD');
-      console.error(`[vol] w=${String(w).padStart(2)} tag=${tag.padStart(5)} v=${String(targetVolumes[w]).padStart(3)} peak=${peakMPW} start=${startMPW} baseEnd=${baseEndWeek} buildEnd=${buildEndWeek} preTaper=${preTaperWeeks}`);
-    }
   }
 
   // Phase tip messages by training period

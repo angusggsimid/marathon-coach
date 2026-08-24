@@ -6,7 +6,7 @@
 import type { CorosSnapshot } from './types';
 import { efficiencyFactorSeries, seilerDistribution, sleepDebt, trendSlope } from './metrics';
 import { formatPace } from './format';
-import { calculateVDOTFromHalf, calculateVDOTFromFull } from '../training-engine';
+import { calculateVDOTFromHalf, calculateVDOTFromFull, calculateVDOTFrom5K10K } from '../training-engine';
 
 // ─── 引擎档案（主 App UserProfile 的白名单子集，与 backup.ts PROFILE_KEYS 对齐）───
 
@@ -344,8 +344,7 @@ function vdotOverrideRecommendation(snapshot: CorosSnapshot, profile: EngineProf
     if (full > 0) return calculateVDOTFromFull(profile.pbFull);
     const half = timeToSeconds(profile.pbHalf);
     if (half > 0) return calculateVDOTFromHalf(profile.pbHalf);
-    const t5 = timeToSeconds(profile.pb5k), t10 = timeToSeconds(profile.pb10k);
-    return t5 > 0 || t10 > 0 ? calculateVDOTFrom5K10K(t5, t10) : 0;
+    return calculateVDOTFrom5K10K(profile.pb5k, profile.pb10k);
   })() : 0;
   const curOverride = profile?.vdotOverride ?? 0;
   const effectiveNow = Math.max(curDerived, curOverride);
@@ -355,7 +354,7 @@ function vdotOverrideRecommendation(snapshot: CorosSnapshot, profile: EngineProf
     title: 'VO₂max 引擎覆盖',
     target: 'profile.vdotOverride',
     currentValue: `换算 ${effectiveNow.toFixed(1)}${curOverride ? ` / 覆盖 ${curOverride}` : ''}`,
-    recommendedValue: vo2,
+    recommendedValue: String(vo2),
     confidence: 'high',
     autoPatch: true,
     evidence: [

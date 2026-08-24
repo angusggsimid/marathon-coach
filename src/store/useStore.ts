@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserProfile, DailyWorkout } from '../utils/training-engine';
-import { generateTrainingPlan, timeToSeconds } from '../utils/training-engine';
+import { generateTrainingPlan, timeToSeconds, resolveVDOT } from '../utils/training-engine';
 import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
 import type { ObjectiveAdaptation, AdaptationOverride } from '../utils/weekly-adaptation';
