@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { UserProfile, DailyWorkout } from '../utils/training-engine';
-import { generateTrainingPlan } from '../utils/training-engine';
+import { generateTrainingPlan, timeToSeconds } from '../utils/training-engine';
 import { computeWeeklyAdaptation } from '../utils/weekly-adaptation';
 import type { CompletionEntry as AdaptCompletion } from '../utils/weekly-adaptation';
 import type { ObjectiveAdaptation, AdaptationOverride } from '../utils/weekly-adaptation';
@@ -410,6 +410,15 @@ export const useStore = create<AppState>()(
         if (patch.lthr !== undefined && Number.isFinite(patch.lthr) && patch.lthr >= 60 && patch.lthr <= 230) {
           updates.lthr = patch.lthr;
           applied.push(`乳酸阈心率 → ${patch.lthr} bpm`);
+        }
+        // C1：PB 能力锚自动刷新（只升不降；空值填充）
+        for (const [key, label] of [['pbHalf', '半马'], ['pbFull', '全马']] as const) {
+          const v = patch[key];
+          if (v === undefined || typeof v !== 'string' || !/^\d{1,2}:[0-5]\d:[0-5]\d$/.test(v)) continue;
+          const cur = get().profile[key];
+          if (cur && timeToSeconds(v) >= timeToSeconds(cur)) continue; // 只升不降
+          updates[key] = v;
+          applied.push(`${label} 能力锚 → ${v}（COROS 实测刷新）`);
         }
         if (applied.length === 0) return { applied, planRegenerated: false };
 

@@ -1546,7 +1546,8 @@ console.log('\n── insights 库回归（validate/zones/metrics/规则/coach�
   const ltRec = report.recommendations.find((r) => r.id === 'lt-pace');
   assert(ltRec?.autoPatch === true && ltRec?.recommendedValue === '4:38', 'coach: LT 校准触发');
   assert(report.patch.ltPace === '4:38', 'coach: 补丁含 ltPace');
-  assert(report.recommendations.some((r) => r.id === 'pb-reference'), 'coach: PB 参照');
+  assert(report.recommendations.some((r) => r.id === 'pb-refresh' && r.autoPatch === true),
+    'coach: PB 能力校准刷新（C1 自动档）');
   assert(report.recommendations.some((r) => r.id === 'goal-feasibility'), 'coach: 目标可行性');
   const engineBackup = {
     schema: 'marathon-backup', version: 1, app: 'marathon-training', exportedAt: '2026-08-15T00:00:00.000Z',
@@ -2322,6 +2323,53 @@ console.log('\n── 批次二：剂量体系（映射校准/35%钳制/封顶/c
   const slowLr = Math.max(0, ...slowPlan.filter((w, i) => i < slowPlan.length - 21)
     .map(w => w.workoutType === 'LSD' ? w.distanceKm ?? 0 : 0));
   assert(slowLr <= 26, '封顶: 慢速 heavy 长跑受时长约束 ≤26km', String(slowLr));
+}
+
+console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
+{
+  const { buildCoachReport } = await import('../src/utils/insights/coach.ts');
+  const asOf16w3 = new Date();
+  const raceIn3 = (days: number) => format(addDays(asOf16w3, days), 'yyyy-MM-dd');
+  // ── C1：buildCoachReport 自动 PB 刷新（只升不降）──
+  const c1Prof = {
+    height: 175, weight: 70, pb5k: '', pb10k: '', pbHalf: '1:50:00', pbFull: '',
+    lthr: '', ltPace: '', raceDate: '2026-12-01', raceType: 'full', goalTime: '',
+    intensity: 'moderate', longRunDay: 0,
+  };
+  const c1Snap = {
+    version: 1, source: 'x', builtAt: '2026-08-20T00:00:00Z', device: '',
+    fitness: { ltPaceSec: 278, predictions: { half: '1:43:43', full: '3:37:47' } },
+    activities: [], dailyMetrics: [],
+  };
+  const c1Rep = buildCoachReport(c1Snap as never, c1Prof as never);
+  assert(c1Rep.patch.pbHalf === '1:43:43' && c1Rep.patch.pbFull === '3:37:47',
+    'C1: 快预测自动写入 patch', JSON.stringify(c1Rep.patch));
+  // 只升不降：档案已够快（1:40 < 预测 1:43）→ 不写 pbHalf
+  const c1Fast = buildCoachReport(c1Snap as never, { ...c1Prof, pbHalf: '1:40:00' } as never);
+  assert(c1Fast.patch.pbHalf === undefined, 'C1: 慢预测不覆盖快 PB');
+  // 空档填充：pbFull 空 → 用手表全马预测填充
+  assert(c1Rep.patch.pbFull === '3:37:47', 'C1: 空 PB 填充');
+
+  // ── C7：专项期 MP 长距离递进 ──
+  const c7p = baseProfile({ raceType: 'full', raceDate: raceIn3(112), intensity: 'moderate' });
+  const c7Plan = generateTrainingPlan(c7p, asOf16w3);
+  const c7RaceIdx = c7Plan.findIndex(w => w.workoutType === 'Race');
+  const c7DTR = (w: typeof c7Plan[number]) => Math.round((new Date(w.date).getTime() - new Date(c7Plan[c7RaceIdx].date).getTime()) / 86400000);
+  const specLSD = c7Plan.filter(w => w.workoutType === 'LSD' && c7DTR(w) < -21)
+    .map(w => ({ date: format(new Date(w.date), 'MM-dd'), dtr: c7DTR(w),
+      mpBlock: (w.details?.main?.length ?? 0) >= 2,
+      mpKm: (w.details?.main?.length ?? 0) >= 2 ? (w.details!.main![1].distanceKm ?? 0) : 0 }));
+  const withMp = specLSD.filter(x => x.mpBlock);
+  assert(withMp.length >= 2, 'C7: 专项期含 ≥2 节 MP 长距离',
+    JSON.stringify(specLSD));
+  // 单调不减（按时间序）
+  for (let i = 1; i < withMp.length; i++) {
+    assert(withMp[i].mpKm >= withMp[i - 1].mpKm, 'C7: MP 块随周期单调递增',
+      `${withMp[i - 1].mpKm}→${withMp[i].mpKm}`);
+  }
+  // 基础期无 MP 块
+  const baseLSD = c7Plan.filter(w => w.workoutType === 'LSD' && c7DTR(w) < -84);
+  assert(baseLSD.every(w => (w.details?.main?.length ?? 0) <= 1), 'C7: 基础期无 MP 块');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

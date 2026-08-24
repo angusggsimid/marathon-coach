@@ -758,12 +758,16 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
         targetPace = paces.z2;
         targetHR = `Zone 2 (${hrZones.z2})`;
         desc = `LSD 长跑 - Zone 2 (${hrZones.z2})`;
-        if (isMixedLSD && dist > 18) {
+        // C7：MP 长距离递进——专项期隔周，MP 块占比随周期 15%→35%（Pfitzinger 专项性）
+        const mpRatio = Math.min(0.35, 0.15 + 0.20 * progress);
+        const altWeek = w % 2 === 1;
+        if (isMixedLSD && dist > 18 && altWeek) {
+          const mpKm = Math.max(3, Math.round(dist * mpRatio));
           details = {
             warmup: getWarmup(),
             main: [
-              { name: '有氧耐力积累', distanceKm: Math.max(1, Math.floor(dist * 0.8)), pace: paces.z2, hrZone: `Zone 2 (${hrZones.z2})`, description: '保持 Zone 2 有氧耐力心率' },
-              { name: '有氧功率/M配速模拟', distanceKm: Math.max(1, Math.ceil(dist * 0.2)), pace: paces.z3, hrZone: `Zone 3 (${hrZones.z3})`, description: '在疲劳状态下切入 Zone 3 模拟比赛配速' }
+              { name: '有氧耐力积累', distanceKm: Math.max(1, dist - mpKm), pace: paces.z2, hrZone: `Zone 2 (${hrZones.z2})`, description: '保持 Zone 2 有氧耐力心率' },
+              { name: 'M配速专项块', distanceKm: mpKm, pace: paces.z3, hrZone: `Zone 3 (${hrZones.z3})`, description: '疲劳状态下按马拉松配速推进——比赛后半程的专项演练' }
             ],
             cooldown: getCooldown()
           };

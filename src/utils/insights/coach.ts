@@ -6,6 +6,7 @@
 import type { CorosSnapshot } from './types';
 import { efficiencyFactorSeries, seilerDistribution, sleepDebt, trendSlope } from './metrics';
 import { formatPace } from './format';
+import { calculateVDOTFromHalf, calculateVDOTFromFull } from '../training-engine';
 
 // ─── 引擎档案（主 App UserProfile 的白名单子集，与 backup.ts PROFILE_KEYS 对齐）───
 
@@ -28,7 +29,7 @@ export interface EngineProfile {
 export type Confidence = 'high' | 'medium' | 'low';
 
 export interface Recommendation {
-  id: 'lt-pace' | 'lthr' | 'adaptation' | 'intensity' | 'pb-reference' | 'goal-feasibility';
+  id: 'lt-pace' | 'lthr' | 'adaptation' | 'intensity' | 'pb-reference' | 'pb-refresh' | 'goal-feasibility';
   title: string;
   target?: string;
   currentValue?: string;
@@ -54,6 +55,9 @@ export interface AdaptationVerdict {
 export interface CoachPatch {
   ltPace?: string;
   lthr?: number;
+  /** 手表实测能力刷新（只升不降；语义=当前能力锚，非历史成绩） */
+  pbHalf?: string;
+  pbFull?: string;
 }
 
 export interface CoachReport {
@@ -332,19 +336,65 @@ function pbRecommendations(snapshot: CorosSnapshot, profile: EngineProfile | nul
   const preds = snapshot.fitness?.predictions;
   if (!preds || !profile) return [];
   const out: Recommendation[] = [];
-  const rows: Array<{ field: string; label: string; pred?: string; pb: string }> = [
-    { field: 'profile.pb5k', label: '5K', pred: preds.km5, pb: profile.pb5k },
-    { field: 'profile.pb10k', label: '10K', pred: preds.km10, pb: profile.pb10k },
-    { field: 'profile.pbHalf', label: '半马', pred: preds.half, pb: profile.pbHalf },
-    { field: 'profile.pbFull', label: '全马', pred: preds.full, pb: profile.pbFull },
+  // 半马/全马：自动能力校准（C1，用户拍板"自动"）；5K/10K 保持参照制
+  const rows: Array<{ field: string; label: string; pred?: string; pb: string; auto: boolean }> = [
+    { field: 'profile.pb5k', label: '5K', pred: preds.km5, pb: profile.pb5k, auto: false },
+    { field: 'profile.pb10k', label: '10K', pred: preds.km10, pb: profile.pb10k, auto: false },
+    { field: 'profile.pbHalf', label: '半马', pred: preds.half, pb: profile.pbHalf, auto: true },
+    { field: 'profile.pbFull', label: '全马', pred: preds.full, pb: profile.pbFull, auto: true },
   ];
   for (const r of rows) {
-    if (!r.pred || !r.pb) continue;
+    if (!r.pred) continue;
     const predSec = timeToSeconds(r.pred);
+    if (predSec <= 0) continue;
+
+    // 自动档（half/full）：空值填充，或较档案 PB 快 ≥30s 且 VDOT 差 ≥1.5
+    if (r.auto) {
+      const pbSec = r.pb ? timeToSeconds(r.pb) : Infinity;
+      if (!r.pb) {
+        out.push({
+          id: 'pb-refresh',
+          title: `${r.label} 能力锚填充`,
+          target: r.field,
+          currentValue: '未填写',
+          recommendedValue: r.pred,
+          confidence: 'medium',
+          autoPatch: true,
+          evidence: ['档案未填写该 PB，以 COROS 当前体能预测作为引擎能力锚（只升不降策略下的填充）'],
+          engineEffect: 'VDOT 输入补全 → 计划剂量与配速按实测能力生成',
+        });
+        continue;
+      }
+      if (pbSec === Infinity || !Number.isFinite(pbSec)) continue;
+      const gap = pbSec - predSec;
+      if (gap < 30) continue;
+      const vdotGap = Math.abs(
+        (r.field.endsWith('Half') ? calculateVDOTFromHalf(r.pred) : calculateVDOTFromFull(r.pred))
+        - (r.field.endsWith('Half') ? calculateVDOTFromHalf(r.pb) : calculateVDOTFromFull(r.pb)),
+      );
+      if (vdotGap < 1.5) continue; // 差距不足 1.5 VDOT 不动档案
+      out.push({
+        id: 'pb-refresh',
+        title: `${r.label} 能力校准刷新`,
+        target: r.field,
+        currentValue: r.pb,
+        recommendedValue: r.pred,
+        confidence: 'medium',
+        autoPatch: true,
+        evidence: [
+          `COROS 实测预测 ${r.pred}，比档案 PB 快 ${formatPace(gap)}（约 ${vdotGap.toFixed(1)} VDOT）`,
+          '已按你的授权自动刷新引擎输入（只升不降）；字段语义=当前能力锚。如需保留历史真实成绩可在档案页改回',
+        ],
+        engineEffect: 'VDOT 上调 → 跑量基线与全部配速重算',
+      });
+      continue;
+    }
+
+    // 参照档（5K/10K）：维持原样
     const pbSec = timeToSeconds(r.pb);
-    if (predSec <= 0 || pbSec <= 0) continue;
+    if (pbSec <= 0) continue;
     const gap = pbSec - predSec;
-    if (gap < 30) continue; // 预测比 PB 快 30s 以上才值得提示
+    if (gap < 30) continue;
     out.push({
       id: 'pb-reference',
       title: `${r.label} 体能参照`,
@@ -418,6 +468,10 @@ export function buildCoachReport(snapshot: CorosSnapshot, profile: EngineProfile
     if (!r.autoPatch || !r.recommendedValue) continue;
     if (r.id === 'lt-pace') patch.ltPace = r.recommendedValue;
     if (r.id === 'lthr') patch.lthr = Number(r.recommendedValue);
+    if (r.id === 'pb-refresh') {
+      if (r.target === 'profile.pbHalf') patch.pbHalf = r.recommendedValue;
+      if (r.target === 'profile.pbFull') patch.pbFull = r.recommendedValue;
+    }
   }
 
   return {
@@ -510,5 +564,7 @@ export function buildCalibratedBackup(backup: Record<string, unknown>, patch: Co
   const profile = data.profile as Record<string, unknown>;
   if (patch.ltPace !== undefined) profile.ltPace = patch.ltPace;
   if (patch.lthr !== undefined) profile.lthr = patch.lthr;
+  if (patch.pbHalf !== undefined) profile.pbHalf = patch.pbHalf;
+  if (patch.pbFull !== undefined) profile.pbFull = patch.pbFull;
   return JSON.stringify(next, null, 2);
 }
