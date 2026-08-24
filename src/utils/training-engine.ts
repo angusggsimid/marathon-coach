@@ -595,17 +595,22 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
     lsdDistance = Math.round(Math.min(lsdDistance, timeCapKm));
 
     let weekVolume: number;
+    let lsdDowngrade = false; // 35% 钳制后低于最小长跑阈值 → 诚实降级为轻松跑
     if (isTaperWeek) {
       // 减量周：LSD 合理占据削减周量的更大份额（Pfitzinger 减量设计 60-70%），
       // 普通占比帽会使周量被顶到减量目标之上——保留抬举机制
       const minWeekVolumeForLSD = Math.ceil(lsdDistance / 0.65);
       weekVolume = Math.max(baseWeekVolume, minWeekVolumeForLSD);
     } else {
-      // 恢复周与普通周同样执行严格 35% 钳制——cutback 必须真实落账
+      // 恢复周与普通周同样执行严格 35% 钳制——cutback 必须真实落账；
+      // 钳制获胜，minLSDKm 下限不再反向抬举（低跑量周的短长跑降级为轻松跑）
       weekVolume = baseWeekVolume;
       lsdDistance = Math.min(lsdDistance, Math.round(baseWeekVolume * 0.35));
+      if (lsdDistance < minLSDKm) {
+        lsdDowngrade = true;
+      }
     }
-    lsdDistance = Math.max(minLSDKm, Math.min(lsdDistance, timeCapKm));
+    lsdDistance = Math.min(lsdDistance, timeCapKm);
 
     // --- Intensity session count: varies by phase (Daniels/Pfitzinger best practice) ---
     // Base phase: fewer quality sessions; Specific phase: full quality load
@@ -685,12 +690,14 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       };
 
       if (profile.intensity === 'light') {
-        // 4 days: LSD(+0), Intensity(+2), Easy(+4), Easy(+6)
+        // 4 days: LSD(+0), Intensity/Easy(+2), Easy(+4), Easy(+6)
+        // 轻松日比例之和 = 1.0——余量必须被吃满，否则实际周量 < 目标、
+        // 35% 长跑钳制按目标计算会在真实周量上失真（曾致 light 档 43-55% 违规）
         if (dow === rel(0)) { wType = 'LSD'; dist = lsdDistance; }
         else if (dow === rel(2) && effSessions > 0) { wType = 'Intensity'; dist = intensityA_km; }
-        else if (dow === rel(2) && effSessions === 0) { wType = 'Easy'; dist = getEasyDist(0.4, 3); }
-        else if (dow === rel(4)) { wType = 'Easy'; dist = getEasyDist(0.3, 3); }
-        else if (dow === rel(6)) { wType = 'Easy'; dist = getEasyDist(0.3, 3); }
+        else if (dow === rel(2) && effSessions === 0) { wType = 'Easy'; dist = getEasyDist(0.45, 3); }
+        else if (dow === rel(4)) { wType = 'Easy'; dist = getEasyDist(0.35, 3); }
+        else if (dow === rel(6)) { wType = 'Easy'; dist = getEasyDist(0.20, 3); }
       } else if (profile.intensity === 'moderate') {
         // 1-quality: LSD(+0), Easy(+2), IntensityA(+3), Easy(+4), Easy(+6)           [5 days]
         // 2-quality: LSD(+0), Easy(+2), IntensityA(+3), Easy(+4), IntensityB(+5), Easy(+6) [6 days]
@@ -758,6 +765,10 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       if (!isRaceDay && dTR <= 6 && finalType === 'LSD') {
         finalType = 'Easy';
         dist = Math.min(dist, 8);
+      }
+      // 35% 钳制降级：低跑量周的短"长跑"诚实标注为轻松跑
+      if (!isRaceDay && finalType === 'LSD' && lsdDowngrade) {
+        finalType = 'Easy';
       }
       const typeA = poolA[(w * 3 + 1) % poolA.length];
       const typeB = poolB[(w * 5 + 2) % poolB.length];
@@ -972,6 +983,39 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
       }
 
       plan.push(workout);
+    }
+  }
+
+  // ── 装配后规范化：非减量周「长跑 ≤35% 周跑量」硬约束 ──
+  // 兜住上游一切分配损耗（模式比例、单次下限、取整）；削出距离转移给同周最长轻松跑。
+  {
+    const weekCount = Math.ceil(plan.length / 7);
+    for (let wi = 0; wi < weekCount; wi++) {
+      const idxs: number[] = [];
+      for (let k = wi * 7; k < Math.min(plan.length, wi * 7 + 7); k++) idxs.push(k);
+      // 减量区（按 dTR）与赛日所在周豁免
+      if (idxs.some(i => totalDays - i < taperWeeksForRace * 7)) continue;
+      if (idxs.some(i => i === totalDays)) continue;
+      const km = idxs.reduce((a, i) => a + (plan[i].distanceKm ?? 0), 0);
+      if (km <= 0) continue;
+      const lrEntry = idxs
+        .map(i => ({ i, w: plan[i] }))
+        .filter(x => x.w.workoutType === 'LSD')
+        .sort((a, b) => (b.w.distanceKm ?? 0) - (a.w.distanceKm ?? 0))[0];
+      if (!lrEntry || !lrEntry.w.distanceKm) continue;
+      const cap = Math.max(3, Math.floor(km * 0.35));
+      const lr = lrEntry.w.distanceKm;
+      if (lr <= cap) continue;
+      const deficit = Math.round((lr - cap) * 10) / 10;
+      lrEntry.w.distanceKm = cap;
+      const easyCap = profile.raceType === 'full' ? 16 : 14;
+      const easy = idxs
+        .map(i => ({ i, w: plan[i] }))
+        .filter(x => x.w.workoutType === 'Easy')
+        .sort((a, b) => (b.w.distanceKm ?? 0) - (a.w.distanceKm ?? 0))[0];
+      if (easy && (easy.w.distanceKm ?? 0) + deficit <= easyCap) {
+        easy.w.distanceKm = Math.round(((easy.w.distanceKm ?? 0) + deficit) * 10) / 10;
+      }
     }
   }
 
