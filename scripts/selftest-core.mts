@@ -2422,6 +2422,21 @@ console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
   const newGoalAnchor = resolveRegenerationAnchor('2027-03-15', mayPlan, new Date('2026-09-15T00:00:00'));
   assert(format(newGoalAnchor, 'yyyy-MM-dd') === '2026-09-15', '锚点: 新目标重开周期');
 
+  // ── 多赛事：计划含多个 Race 条目时，锚点以「计划末日=主赛」为准，不被 B 赛劫持 ──
+  // 构造：长弧计划 + 注入一个更早的 B 赛条目（10/25 半马距离）
+  const multiPlan = [...mayPlan];
+  const bIdx = multiPlan.findIndex(w => format(new Date(w.date), 'yyyy-MM-dd') === '2026-10-25');
+  if (bIdx > 0) {
+    multiPlan[bIdx] = { ...multiPlan[bIdx], workoutType: 'Race', description: 'B赛', distanceKm: 21.1 };
+  }
+  const multiAnchor = resolveRegenerationAnchor('2026-11-24', multiPlan, new Date('2026-09-15T00:00:00'));
+  assert(format(multiAnchor, 'yyyy-MM-dd') === '2026-05-04', '锚点: 多赛事不被 B 赛劫持',
+    format(multiAnchor, 'yyyy-MM-dd'));
+  // 计划止期漂移（主赛变更）仍正确重开
+  const truncated = mayPlan.slice(0, Math.floor(mayPlan.length * 0.7)); // 止期 ≈ 9 月中
+  const driftAnchor = resolveRegenerationAnchor('2026-11-24', truncated, new Date('2026-09-15T00:00:00'));
+  assert(format(driftAnchor, 'yyyy-MM-dd') === '2026-09-15', '锚点: 主赛变更(止期漂移)重开');
+
   // 计划峰值命中 COROS 带：覆盖生效后 16 周全马 moderate
   const ovPlan = generateTrainingPlan({ ...baseProfile({ raceType: 'full', raceDate: raceIn3(112), intensity: 'moderate' }), pbHalf: '1:43:43', vdotOverride: 48 }, asOf16w3);
   const ovWeeks: number[] = [];

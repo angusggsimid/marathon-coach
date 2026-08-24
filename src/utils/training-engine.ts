@@ -359,9 +359,10 @@ export function resolveRegenerationAnchor(
   today: Date = new Date(),
 ): Date {
   if (!plan.length) return localDay(today);
-  const planRace = plan.find(w => w.workoutType === 'Race');
-  const planRaceDate = planRace ? format(planRace.date, 'yyyy-MM-dd') : null;
-  if (planRaceDate && planRaceDate !== profileRaceDate) return localDay(today);
+  // 主赛标识 = 计划末日（引擎恒以 profile.raceDate 收尾）。
+  // 不用 find(Race)：多赛事场景下更早的 B 赛条目会劫持判定。
+  const planPrimaryDate = format(plan[plan.length - 1].date, 'yyyy-MM-dd');
+  if (planPrimaryDate !== profileRaceDate) return localDay(today);
   // 原周期起点 = 计划首日
   return normalizeWorkoutDate(plan[0].date);
 }
