@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T07:17:30.242Z",
+  "generatedAt": "2026-09-05T06:58:41.810Z",
   "races": [
     {
       "id": "zc-8230960",
@@ -12304,26 +12304,6 @@
       ]
     },
     {
-      "id": "nr-326",
-      "name": "2026钦州马拉松",
-      "date": "2026-03-22",
-      "city": "钦州",
-      "province": "广西",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "http://www.qz-marathon.cn/",
-      "_source": "nowrun",
-      "_sourceId": "326",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-135",
       "name": "2026奉化马拉松",
       "date": "2026-03-22",
@@ -12339,6 +12319,26 @@
       "registrationUrl": "http://www.fenghuataohuamarathon.com/",
       "_source": "nowrun",
       "_sourceId": "135",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-326",
+      "name": "2026钦州马拉松",
+      "date": "2026-03-22",
+      "city": "钦州",
+      "province": "广西",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "http://www.qz-marathon.cn/",
+      "_source": "nowrun",
+      "_sourceId": "326",
       "sources": [
         "nowrun"
       ]
@@ -13044,25 +13044,6 @@
       ]
     },
     {
-      "id": "nr-358",
-      "name": "2026重庆女子半程马拉松",
-      "date": "2026-03-29",
-      "city": "两江新",
-      "province": "重庆",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.sherowm.com/",
-      "_source": "nowrun",
-      "_sourceId": "358",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-2",
       "name": "2026顺义后沙峪人才社区半程马拉松",
       "date": "2026-03-29",
@@ -13082,21 +13063,20 @@
       ]
     },
     {
-      "id": "nr-141",
-      "name": "2026太湖图影马拉松",
+      "id": "nr-358",
+      "name": "2026重庆女子半程马拉松",
       "date": "2026-03-29",
-      "city": "湖州",
-      "province": "浙江",
+      "city": "两江新",
+      "province": "重庆",
       "distances": [
-        "full",
         "half"
       ],
       "terrain": "flat",
       "label": null,
       "status": "closed",
-      "registrationUrl": "https://www.thtymls.com/",
+      "registrationUrl": "https://www.sherowm.com/",
       "_source": "nowrun",
-      "_sourceId": "141",
+      "_sourceId": "358",
       "sources": [
         "nowrun"
       ]
@@ -13117,6 +13097,26 @@
       "registrationUrl": "https://www.nowrun.cn/race/361",
       "_source": "nowrun",
       "_sourceId": "361",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-141",
+      "name": "2026太湖图影马拉松",
+      "date": "2026-03-29",
+      "city": "湖州",
+      "province": "浙江",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.thtymls.com/",
+      "_source": "nowrun",
+      "_sourceId": "141",
       "sources": [
         "nowrun"
       ]
@@ -13948,26 +13948,6 @@
       ]
     },
     {
-      "id": "nr-421",
-      "name": "2026芒市泼水节马拉松",
-      "date": "2026-04-12",
-      "city": "德宏州芒",
-      "province": "云南",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/421",
-      "_source": "nowrun",
-      "_sourceId": "421",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-330",
       "name": "2026黄姚古镇马拉松",
       "date": "2026-04-12",
@@ -13983,6 +13963,26 @@
       "registrationUrl": "https://www.nowrun.cn/race/330",
       "_source": "nowrun",
       "_sourceId": "330",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-421",
+      "name": "2026芒市泼水节马拉松",
+      "date": "2026-04-12",
+      "city": "德宏州芒",
+      "province": "云南",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/421",
+      "_source": "nowrun",
+      "_sourceId": "421",
       "sources": [
         "nowrun"
       ]
@@ -14085,6 +14085,25 @@
       ]
     },
     {
+      "id": "nr-112",
+      "name": "2026江阴半程马拉松",
+      "date": "2026-04-12",
+      "city": "无锡",
+      "province": "江苏",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/112",
+      "_source": "nowrun",
+      "_sourceId": "112",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
       "id": "nr-113",
       "name": "2026淮安马拉松",
       "date": "2026-04-12",
@@ -14100,25 +14119,6 @@
       "registrationUrl": "https://huaian.marathon.org.cn/",
       "_source": "nowrun",
       "_sourceId": "113",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
-      "id": "nr-112",
-      "name": "2026江阴半程马拉松",
-      "date": "2026-04-12",
-      "city": "无锡",
-      "province": "江苏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/112",
-      "_source": "nowrun",
-      "_sourceId": "112",
       "sources": [
         "nowrun"
       ]
@@ -14806,25 +14806,6 @@
       ]
     },
     {
-      "id": "nr-451",
-      "name": "2026陇南康县青龙山半程马拉松",
-      "date": "2026-04-19",
-      "city": "陇南",
-      "province": "甘肃",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "closed",
-      "registrationUrl": "http://kangxianmarathon.com/",
-      "_source": "nowrun",
-      "_sourceId": "451",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-230",
       "name": "2026德州马拉松",
       "date": "2026-04-19",
@@ -14845,21 +14826,20 @@
       ]
     },
     {
-      "id": "nr-383",
-      "name": "2026宜宾长江首城马拉松",
+      "id": "nr-451",
+      "name": "2026陇南康县青龙山半程马拉松",
       "date": "2026-04-19",
-      "city": "宜宾",
-      "province": "四川",
+      "city": "陇南",
+      "province": "甘肃",
       "distances": [
-        "full",
         "half"
       ],
       "terrain": "flat",
       "label": null,
       "status": "closed",
-      "registrationUrl": "https://www.nowrun.cn/race/383",
+      "registrationUrl": "http://kangxianmarathon.com/",
       "_source": "nowrun",
-      "_sourceId": "383",
+      "_sourceId": "451",
       "sources": [
         "nowrun"
       ]
@@ -14879,6 +14859,26 @@
       "registrationUrl": "https://www.nowrun.cn/race/212",
       "_source": "nowrun",
       "_sourceId": "212",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-383",
+      "name": "2026宜宾长江首城马拉松",
+      "date": "2026-04-19",
+      "city": "宜宾",
+      "province": "四川",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "closed",
+      "registrationUrl": "https://www.nowrun.cn/race/383",
+      "_source": "nowrun",
+      "_sourceId": "383",
       "sources": [
         "nowrun"
       ]
@@ -17631,7 +17631,7 @@
       ],
       "terrain": "flat",
       "label": null,
-      "status": "upcoming",
+      "status": "closed",
       "registrationUrl": "https://zuicool.com/event/25374",
       "_source": "zuicool-events",
       "_sourceId": "25374",
@@ -18395,26 +18395,6 @@
       ]
     },
     {
-      "id": "nr-13",
-      "name": "2026怀柔长城马拉松",
-      "date": "2026-09-27",
-      "city": "怀柔",
-      "province": "北京",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.huairougreatwallmarathon.com/",
-      "_source": "nowrun",
-      "_sourceId": "13",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-35",
       "name": "2026衡水湖马拉松",
       "date": "2026-09-27",
@@ -18430,6 +18410,26 @@
       "registrationUrl": "http://www.hengshuilakemarathon.com/",
       "_source": "nowrun",
       "_sourceId": "35",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
+      "id": "nr-13",
+      "name": "2026怀柔长城马拉松",
+      "date": "2026-09-27",
+      "city": "怀柔",
+      "province": "北京",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://www.huairougreatwallmarathon.com/",
+      "_source": "nowrun",
+      "_sourceId": "13",
       "sources": [
         "nowrun"
       ]
@@ -19031,6 +19031,27 @@
       ]
     },
     {
+      "id": "zc-85910",
+      "name": "2026铁门关半程马拉松",
+      "date": "2026-10-18",
+      "city": "铁门关",
+      "province": "新疆",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/85910",
+      "_source": "zuicool",
+      "_sourceId": "85910",
+      "sources": [
+        "marathonbm",
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-75709",
       "name": "2026东阳光宜都半程马拉松",
       "date": "2026-10-18",
@@ -19073,6 +19094,27 @@
       ]
     },
     {
+      "id": "zc-19152",
+      "name": "2026星星故乡•宁夏沙坡头半程马拉松",
+      "date": "2026-10-18",
+      "city": "中卫",
+      "province": "宁夏",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/19152",
+      "_source": "zuicool",
+      "_sourceId": "19152",
+      "sources": [
+        "marathonbm",
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-93012",
       "name": "2026“杭州-阿克苏同心杯”阿克苏市马拉松暨“跑遍大美新疆”阿克苏站",
       "date": "2026-10-18",
@@ -19090,27 +19132,6 @@
       "_sourceId": "93012",
       "sources": [
         "marathonbm",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-85910",
-      "name": "2026铁门关半程马拉松",
-      "date": "2026-10-18",
-      "city": "铁门关",
-      "province": "新疆",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/85910",
-      "_source": "zuicool",
-      "_sourceId": "85910",
-      "sources": [
-        "marathonbm",
-        "nowrun",
         "zuicool"
       ]
     },
@@ -19271,27 +19292,6 @@
       "_source": "zuicool-events",
       "_sourceId": "91161",
       "sources": [
-        "nowrun",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-88879",
-      "name": "2026星星故乡•宁夏沙坡头半程马拉松",
-      "date": "2026-10-18",
-      "city": "中卫",
-      "province": "宁夏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://zuicool.com/event/88879",
-      "_source": "zuicool-events",
-      "_sourceId": "88879",
-      "sources": [
-        "marathonbm",
         "nowrun",
         "zuicool"
       ]
@@ -19617,26 +19617,6 @@
       ]
     },
     {
-      "id": "zc-82426",
-      "name": "2026库尔勒半程马拉松暨“跑遍大美新疆”库尔勒站",
-      "date": "2026-10-25",
-      "city": "巴音郭楞蒙古",
-      "province": "新疆",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/82426",
-      "_source": "zuicool",
-      "_sourceId": "82426",
-      "sources": [
-        "marathonbm",
-        "zuicool"
-      ]
-    },
-    {
       "id": "zc-81593",
       "name": "2026重庆开州汉丰湖马拉松",
       "date": "2026-10-25",
@@ -19655,6 +19635,26 @@
       "sources": [
         "marathonbm",
         "nowrun",
+        "zuicool"
+      ]
+    },
+    {
+      "id": "zc-82426",
+      "name": "2026库尔勒半程马拉松暨“跑遍大美新疆”库尔勒站",
+      "date": "2026-10-25",
+      "city": "巴音郭楞蒙古",
+      "province": "新疆",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/82426",
+      "_source": "zuicool",
+      "_sourceId": "82426",
+      "sources": [
+        "marathonbm",
         "zuicool"
       ]
     },
@@ -19959,25 +19959,6 @@
       "_sourceId": "23075",
       "sources": [
         "nowrun",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-18918",
-      "name": "2026常州西太湖半程马拉松",
-      "date": "2026-10-25",
-      "city": "常州",
-      "province": "江苏",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://zuicool.com/event/18918",
-      "_source": "zuicool-events",
-      "_sourceId": "18918",
-      "sources": [
         "zuicool"
       ]
     },
@@ -20644,6 +20625,26 @@
       ]
     },
     {
+      "id": "zc-18918",
+      "name": "2026常州西太湖半程马拉松",
+      "date": "2026-11-01",
+      "city": "常州",
+      "province": "江苏",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://zuicool.com/event/18918",
+      "_source": "zuicool-events",
+      "_sourceId": "18918",
+      "sources": [
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-68304",
       "name": "2026大通湖半程马拉松",
       "date": "2026-11-01",
@@ -21067,25 +21068,6 @@
       ]
     },
     {
-      "id": "nr-232",
-      "name": "2026临朐半程马拉松",
-      "date": "2026-11-01",
-      "city": "潍坊",
-      "province": "山东",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://www.nowrun.cn/race/232",
-      "_source": "nowrun",
-      "_sourceId": "232",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
       "id": "nr-247",
       "name": "2026临沂马拉松",
       "date": "2026-11-01",
@@ -21106,20 +21088,20 @@
       ]
     },
     {
-      "id": "nr-117",
-      "name": "2026常州西太湖半程马拉松",
+      "id": "nr-232",
+      "name": "2026临朐半程马拉松",
       "date": "2026-11-01",
-      "city": "常州",
-      "province": "江苏",
+      "city": "潍坊",
+      "province": "山东",
       "distances": [
         "half"
       ],
       "terrain": "flat",
       "label": null,
       "status": "upcoming",
-      "registrationUrl": "http://www.czxthmls.com",
+      "registrationUrl": "https://www.nowrun.cn/race/232",
       "_source": "nowrun",
-      "_sourceId": "117",
+      "_sourceId": "232",
       "sources": [
         "nowrun"
       ]
@@ -21305,7 +21287,6 @@
       "_source": "zuicool-events",
       "_sourceId": "90328",
       "sources": [
-        "marathonbm",
         "nowrun",
         "zuicool"
       ]
@@ -22028,6 +22009,25 @@
       ]
     },
     {
+      "id": "nr-151",
+      "name": "2026安吉半程马拉松",
+      "date": "2026-11-15",
+      "city": "湖州",
+      "province": "浙江",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://anji.sport-china.cn",
+      "_source": "nowrun",
+      "_sourceId": "151",
+      "sources": [
+        "nowrun"
+      ]
+    },
+    {
       "id": "nr-286",
       "name": "2026长沙马拉松",
       "date": "2026-11-15",
@@ -22043,25 +22043,6 @@
       "registrationUrl": "https://www.marathonchangsha.com/",
       "_source": "nowrun",
       "_sourceId": "286",
-      "sources": [
-        "nowrun"
-      ]
-    },
-    {
-      "id": "nr-151",
-      "name": "2026安吉半程马拉松",
-      "date": "2026-11-15",
-      "city": "湖州",
-      "province": "浙江",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://anji.sport-china.cn",
-      "_source": "nowrun",
-      "_sourceId": "151",
       "sources": [
         "nowrun"
       ]
@@ -22147,26 +22128,6 @@
       ]
     },
     {
-      "id": "zc-65935-20261122",
-      "name": "2026卡游义乌半程马拉松",
-      "date": "2026-11-22",
-      "city": "金华",
-      "province": "浙江",
-      "distances": [
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/65935",
-      "_source": "zuicool",
-      "_sourceId": "65935",
-      "sources": [
-        "nowrun",
-        "zuicool"
-      ]
-    },
-    {
       "id": "zc-26082",
       "name": "2026佛山市环两江稻田马拉松",
       "date": "2026-11-22",
@@ -22182,6 +22143,26 @@
       "registrationUrl": "https://reg.zuicool.com/26082",
       "_source": "zuicool",
       "_sourceId": "26082",
+      "sources": [
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
+      "id": "zc-65935-20261122",
+      "name": "2026卡游义乌半程马拉松",
+      "date": "2026-11-22",
+      "city": "金华",
+      "province": "浙江",
+      "distances": [
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/65935",
+      "_source": "zuicool",
+      "_sourceId": "65935",
       "sources": [
         "nowrun",
         "zuicool"
@@ -22352,6 +22333,27 @@
       ]
     },
     {
+      "id": "zc-68782",
+      "name": "2026温州马拉松",
+      "date": "2026-11-22",
+      "city": "温州",
+      "province": "浙江",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "upcoming",
+      "registrationUrl": "https://zuicool.com/event/68782",
+      "_source": "zuicool-events",
+      "_sourceId": "68782",
+      "sources": [
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-71328",
       "name": "2026宁都红色马拉松",
       "date": "2026-11-22",
@@ -22478,6 +22480,28 @@
       ]
     },
     {
+      "id": "zc-63767",
+      "name": "2026肇庆马拉松",
+      "date": "2026-11-29",
+      "city": "肇庆",
+      "province": "广东",
+      "distances": [
+        "full",
+        "half"
+      ],
+      "terrain": "flat",
+      "label": null,
+      "status": "open",
+      "registrationUrl": "https://reg.zuicool.com/63767",
+      "_source": "zuicool",
+      "_sourceId": "63767",
+      "sources": [
+        "marathonbm",
+        "nowrun",
+        "zuicool"
+      ]
+    },
+    {
       "id": "zc-51085-20261129",
       "name": "2026奉贤海湾森林半程马拉松",
       "date": "2026-11-29",
@@ -22499,11 +22523,11 @@
       ]
     },
     {
-      "id": "zc-63767",
-      "name": "2026肇庆马拉松",
+      "id": "zc-35197",
+      "name": "2026贵州铜仁·梵净山马拉松",
       "date": "2026-11-29",
-      "city": "肇庆",
-      "province": "广东",
+      "city": "铜仁",
+      "province": "贵州",
       "distances": [
         "full",
         "half"
@@ -22511,9 +22535,9 @@
       "terrain": "flat",
       "label": null,
       "status": "open",
-      "registrationUrl": "https://reg.zuicool.com/63767",
+      "registrationUrl": "https://reg.zuicool.com/35197",
       "_source": "zuicool",
-      "_sourceId": "63767",
+      "_sourceId": "35197",
       "sources": [
         "marathonbm",
         "nowrun",
@@ -22577,27 +22601,6 @@
       "registrationUrl": "https://zuicool.com/event/60269",
       "_source": "zuicool-events",
       "_sourceId": "60269",
-      "sources": [
-        "nowrun",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-27164",
-      "name": "2026贵州铜仁·梵净山马拉松",
-      "date": "2026-11-29",
-      "city": "铜仁",
-      "province": "贵州",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://zuicool.com/event/27164",
-      "_source": "zuicool-events",
-      "_sourceId": "27164",
       "sources": [
         "nowrun",
         "zuicool"
@@ -23186,27 +23189,6 @@
       "_sourceId": "57234",
       "sources": [
         "marathonbm",
-        "zuicool"
-      ]
-    },
-    {
-      "id": "zc-68782",
-      "name": "2026温州马拉松",
-      "date": "2026-12-06",
-      "city": "温州",
-      "province": "浙江",
-      "distances": [
-        "full",
-        "half"
-      ],
-      "terrain": "flat",
-      "label": null,
-      "status": "upcoming",
-      "registrationUrl": "https://zuicool.com/event/68782",
-      "_source": "zuicool-events",
-      "_sourceId": "68782",
-      "sources": [
-        "nowrun",
         "zuicool"
       ]
     },
