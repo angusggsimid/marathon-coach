@@ -2015,7 +2015,7 @@ console.log('\n── TE 执行质量验证 ──');
   const rLow = matchActivitiesToPlan(planTe, [
     ...teRuns.map(r => ({ date: day(-(teRuns.indexOf(r) * 3)), type: 'run', name: r.name, distanceKm: 8, aerobicTe: r.aerobicTe })),
     { date: '2026-08-22', type: 'run', name: 'tempo日', distanceKm: 7.9, avgPaceSec: 280, aerobicTe: 1.2 },
-  ]);
+  ], asOf);
   const tempoSug = rLow.find(s => s.dateStr === '2026-08-22');
   assert(tempoSug?.status === 'partial' && (tempoSug.teNote ?? '').includes('强度不足'),
     'TE集成: Tempo 低 TE 降 partial', JSON.stringify(tempoSug));
@@ -2023,7 +2023,7 @@ console.log('\n── TE 执行质量验证 ──');
   const rHigh = matchActivitiesToPlan(planTe, [
     ...teRuns.map(r => ({ date: day(-(teRuns.indexOf(r) * 3)), type: 'run', name: r.name, distanceKm: 8, aerobicTe: r.aerobicTe })),
     { date: '2026-08-21', type: 'run', name: 'easy日', distanceKm: 8.1, aerobicTe: 4.2 },
-  ]);
+  ], asOf);
   const easySug = rHigh.find(s => s.dateStr === '2026-08-21');
   assert(easySug?.status === 'full' && (easySug.teNote ?? '').includes('偏硬'), 'TE集成: Easy 高 TE 提示但保持 full');
 }
