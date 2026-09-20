@@ -2210,6 +2210,25 @@ console.log('\n── 批次一：taper 红线 + 档案一致性守卫 ──');
   assert(raceWeek.length > 0 && raceWeek.every(w => ['Easy', 'Rest', 'Recovery'].includes(w.workoutType)),
     'taper: 赛周仅轻松/休息/恢复', JSON.stringify(raceWeek.map(w => `${format(new Date(w.date),'MM-dd')} ${w.workoutType}`)));
 
+  // 星期几几何全扫描：7 个起始偏移下赛周语义必须一致（防 LSD 落 dTR=7 类的漏网）
+  {
+    let sweepFail = '';
+    for (let off = 0; off < 7; off++) {
+      const asOfSweep = new Date(asOf16w.getTime() + off * 86400000);
+      const pSweep = baseProfile({ raceType: 'full', raceDate: format(addDays(asOfSweep, 112), 'yyyy-MM-dd'), intensity: 'moderate' });
+      const plSweep = generateTrainingPlan(pSweep, asOfSweep);
+      const rIdx = plSweep.findIndex(w => w.workoutType === 'Race');
+      if (rIdx < 0) { sweepFail += `off${off}:无赛日 `; continue; }
+      const rDate = new Date(plSweep[rIdx].date).getTime();
+      const bad = plSweep.filter(w => {
+        const d = Math.round((new Date(w.date).getTime() - rDate) / 86400000);
+        return d >= -7 && d < 0 && !['Easy', 'Rest', 'Recovery'].includes(w.workoutType);
+      });
+      if (bad.length) sweepFail += `off${off}:${bad.map(w => `${format(new Date(w.date),'MM-dd')}${w.workoutType}`).join(',')} `;
+    }
+    assert(sweepFail === '', 'taper: 赛周语义 7 偏移全扫描', sweepFail);
+  }
+
   // taper 前两/三周保留 MP 专项且递减（仅统计减量区内：距赛 8-21 天）
   const mpSessions = fPlan.filter(w => w.workoutType === 'MP' && daysToRace(w) <= -8 && daysToRace(w) >= -21);
   assert(mpSessions.length >= 1, 'taper: 存在 MP 专项课');

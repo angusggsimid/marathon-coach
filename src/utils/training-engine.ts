@@ -761,8 +761,8 @@ export function generateTrainingPlan(profile: UserProfile, asOf: Date = new Date
           dist = dTR >= 10 ? 16 : Math.min(dist, 10);
         }
       }
-      // 赛周（最后 6 天）：残余 LSD 降级为轻松跑并封顶 8km（shakeout 化）
-      if (!isRaceDay && dTR <= 6 && finalType === 'LSD') {
+      // 赛周（最后 7 天，与质量课抑制阈值一致）：残余 LSD 降级为轻松跑并封顶 8km（shakeout 化）
+      if (!isRaceDay && dTR <= 7 && finalType === 'LSD') {
         finalType = 'Easy';
         dist = Math.min(dist, 8);
       }
