@@ -107,6 +107,7 @@ import { heatAdjustment } from '../src/utils/heat-adjust.ts';
 import { parseOpenMeteo, shouldRefetchWeather } from '../src/utils/weather.ts';
 import { calibratePrediction, formatPredictionDelta } from '../src/utils/prediction-calibration.ts';
 import { SCIENCE_NOTES } from '../src/content/science-notes.ts';
+import { buildSnapshotFromRaw } from '../src/utils/insights/snapshot-builder.ts';
 
 let passed = 0;
 let failed = 0;
@@ -2464,6 +2465,58 @@ console.log('\n── 批次三：PB 自动校准 + MP 长距离递进 ──');
   }
   const ovPeak = Math.max(...ovWeeks.slice(0, ovWeeks.length - 3));
   assert(ovPeak >= 68 && ovPeak <= 78, 'C1终局: VO₂max 覆盖后峰值命中 COROS 带 68-78', `peak=${ovPeak}`);
+}
+
+console.log('\n── coros 睡眠解析（新旧格式兼容）──');
+
+{
+  // 旧格式（querySleepData，本地留存样本）；服务器 2026-10 已改名为 querySleepOverview
+  const oldFmt = `Sleep Data
+========================
+
+2026-07-16
+Sleep Score: 65
+Main Sleep: 5h 50min
+Deep Sleep Ratio: 18%
+Light Sleep Ratio: 57%
+REM Ratio: 14%
+Awake Ratio: 11%
+Awake Time: 44 min
+Awake Count (>5 min): 3
+Main Sleep Window: 2026-07-16 00:26 - 2026-07-16 07:00
+Naps Total: 0 min`;
+  const sOld = buildSnapshotFromRaw({ sportRecordsTexts: [], sleepText: oldFmt });
+  const dOld = sOld.dailyMetrics.find((d) => d.date === '2026-07-16');
+  assert(dOld?.sleepScore === 65, '旧格式: 睡眠分解析', String(dOld?.sleepScore));
+  assert(dOld?.sleepMinutes === 5 * 60 + 50, '旧格式: 睡眠时长解析', String(dOld?.sleepMinutes));
+  assert(dOld?.deepSleepPct === 18, '旧格式: 深睡比例解析', String(dOld?.deepSleepPct));
+
+  // 新格式（querySleepOverview 真实返回）
+  const newFmt = `Sleep Overview
+========================
+Note: each record below is dated by its wake-up day.
+
+2026-10-06
+Sleep Score: 74
+Daily Sleep: 6h 6min (incl. naps)
+Main Sleep (asleep): 6h 6min
+Main Sleep Period (incl. awake): 6h 24min
+Sleep metrics scope: daily
+Deep Sleep Ratio: 6%
+Light Sleep Ratio: 57%
+REM Ratio: 32%
+Awake Ratio: 5%
+Awake Time: 18 min
+Awake Count (>5 min): 0
+Main Sleep Window: 2026-10-06 01:10 - 2026-10-06 07:34
+Naps Total: 0 min`;
+  const sNew = buildSnapshotFromRaw({ sportRecordsTexts: [], sleepText: newFmt });
+  const dNew = sNew.dailyMetrics.find((d) => d.date === '2026-10-06');
+  assert(dNew?.sleepScore === 74, '新格式: 睡眠分解析', String(dNew?.sleepScore));
+  assert(dNew?.sleepMinutes === 6 * 60 + 6, '新格式: 睡眠时长解析（Main Sleep (asleep)）', String(dNew?.sleepMinutes));
+  assert(dNew?.deepSleepPct === 6, '新格式: 深睡比例解析', String(dNew?.deepSleepPct));
+  // 不得误吞 "Main Sleep Period (...)" 行
+  assert(dNew?.sleepMinutes !== 6 * 60 + 24, '新格式: 不误配 Main Sleep Period');
 }
 
 console.log(`\n── selftest-core: ${passed} passed, ${failed} failed ──\n`);

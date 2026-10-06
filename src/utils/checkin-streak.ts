@@ -11,7 +11,7 @@ export function countStreak(
   completions: Record<string, CompletionEntry>,
   asOf: Date = new Date(),
 ): number {
-  let cursor = new Date(asOf);
+  const cursor = new Date(asOf);
   // 今天未打卡 → 从昨天起算连续段
   if (!completions[format(cursor, 'yyyy-MM-dd')]) {
     cursor.setDate(cursor.getDate() - 1);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import {
   loadWeatherCache, saveWeatherCache, shouldRefetchWeather,
@@ -22,16 +22,14 @@ export default function WeatherHintCard({ plan }: { plan: DailyWorkout[] }) {
   const [cityInput, setCityInput] = useState('');
   const [dismissed, setDismissed] = useState(false);
 
-  const refresh = async (l: WeatherLocation) => {
-    const result = await fetchForecast(l.lat, l.lon);
-    if (result) { saveWeatherCache(result); setDays(result); }
-  };
-
   useEffect(() => {
     if (!loc) return;
     const cache = loadWeatherCache();
-    if (shouldRefetchWeather(cache)) void refresh(loc);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (shouldRefetchWeather(cache)) {
+      void fetchForecast(loc.lat, loc.lon).then(result => {
+        if (result) { saveWeatherCache(result); setDays(result); }
+      });
+    }
   }, [loc]);
 
   const useMyPosition = () => {
@@ -47,7 +45,7 @@ export default function WeatherHintCard({ plan }: { plan: DailyWorkout[] }) {
     );
   };
 
-  const useCity = async () => {
+  const saveCity = async () => {
     if (!cityInput.trim()) return;
     const g = await geocodeCity(cityInput.trim());
     if (!g) return;
@@ -58,7 +56,7 @@ export default function WeatherHintCard({ plan }: { plan: DailyWorkout[] }) {
   if (dismissed) return null;
 
   const todayKey = format(new Date(), 'yyyy-MM-dd');
-  const tomorrowKey = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+  const tomorrowKey = format(addDays(new Date(), 1), 'yyyy-MM-dd');
   const dayName = (key: string) => {
     const label = key === todayKey ? '今天' : '明天';
     return `${label}(${format(new Date(key + 'T12:00:00'), 'M/d EEE', { locale: zhCN })})`;
@@ -121,12 +119,12 @@ export default function WeatherHintCard({ plan }: { plan: DailyWorkout[] }) {
             <input
               value={cityInput}
               onChange={e => setCityInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') void useCity(); }}
+              onKeyDown={e => { if (e.key === 'Enter') void saveCity(); }}
               placeholder="训练城市，如 广州"
               className="flex-1 min-w-[120px] bg-[var(--color-surface)] text-white text-[12px] rounded-lg px-2 py-1 border border-[var(--color-separator)] outline-none"
             />
             <button
-              onClick={() => void useCity()}
+              onClick={() => void saveCity()}
               disabled={!cityInput.trim()}
               className="text-[11.5px] font-semibold px-2.5 py-1 rounded-lg bg-[var(--color-accent)] text-black disabled:opacity-50"
             >

@@ -199,7 +199,8 @@ function parseDailyMetrics(raw: SyncRawData): DailyMetric[] {
       if (!date) continue;
       const d = day(date);
       d.sleepScore = Number(b.match(/Sleep Score: (\d+)/)?.[1] ?? NaN) || undefined;
-      const ms = b.match(/Main Sleep: (\d+)h (\d+)min/);
+      // 旧格式 "Main Sleep: 5h 50min"；新格式（querySleepOverview）"Main Sleep (asleep): 6h 32min"
+      const ms = b.match(/Main Sleep(?: \(asleep\))?: (\d+)h (\d+)min/);
       if (ms) d.sleepMinutes = Number(ms[1]) * 60 + Number(ms[2]);
       d.deepSleepPct = Number(b.match(/Deep Sleep Ratio: (\d+)%/)?.[1] ?? NaN) || undefined;
     }

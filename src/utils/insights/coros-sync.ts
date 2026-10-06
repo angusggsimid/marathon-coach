@@ -86,7 +86,8 @@ export async function runCorosSync(
   const d30 = fmtDate(daysAgo(30));
   const dToday = fmtDate(new Date());
   progress('拉取睡眠数据', 1, 3);
-  raw.sleepText = await call('querySleepData', { startDate: d30, endDate: dToday });
+  // 服务器已将 querySleepData 改名为 querySleepOverview（2026-10 实测旧名返回 invalid_tool_name）
+  raw.sleepText = await call('querySleepOverview', { startDate: d30, endDate: dToday });
   progress('拉取睡眠 HRV', 2, 3);
   raw.sleepHrvText = await call('querySleepHrv', { startDate: d30, endDate: dToday });
   progress('拉取静息心率', 3, 3);
